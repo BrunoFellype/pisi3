@@ -5,7 +5,14 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
-# 1. Configuração da Página (Profissional, sem ícones genéricos)
+try:
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+    SKLEARN_DISPONIVEL = True
+except ImportError:
+    SKLEARN_DISPONIVEL = False
+
+# 1. Configuração da Página
 st.set_page_config(
     page_title="ASTRA - Inteligência Acadêmica",
     page_icon="📊",
@@ -25,6 +32,8 @@ ASTRA_COLORS = {
     "accent_emerald": "#34D399",
     "accent_amber": "#FBBF24",
     "accent_rose": "#F43F5E",
+    "accent_violet": "#A78BFA",
+    "accent_teal": "#2DD4BF"
 }
 
 CATEGORICAL_PALETTE = [
@@ -33,8 +42,8 @@ CATEGORICAL_PALETTE = [
     ASTRA_COLORS["accent_emerald"],
     ASTRA_COLORS["accent_amber"],
     ASTRA_COLORS["accent_rose"],
-    "#A78BFA",
-    "#2DD4BF",
+    ASTRA_COLORS["accent_violet"],
+    ASTRA_COLORS["accent_teal"]
 ]
 
 # 3. Estilização CSS Moderna
@@ -170,7 +179,7 @@ except Exception as erro:
 st.sidebar.title("🎯 Filtros ASTRA")
 st.sidebar.caption("Personalize sua análise:")
 
-# Filtro: Quantidade de Dados a Analisar (Controle de Amostra)
+# Filtro: Quantidade de Dados a Analisar
 total_registros = len(df_raw)
 qtd_analise = st.sidebar.slider(
     "Volume de Dados Analisado:",
@@ -183,7 +192,7 @@ qtd_analise = st.sidebar.slider(
 
 st.sidebar.markdown("---")
 
-# Filtro: Cursos (Padrão: TODOS selecionados para contemplar os 10.000)
+# Filtro: Cursos
 cursos_unicos = sorted(df_raw['major'].dropna().unique())
 cursos_sel = st.sidebar.multiselect(
     "Cursos (Graduação):",
@@ -258,6 +267,26 @@ metodos_sel = st.sidebar.multiselect(
     options=metodos_unicos,
     default=metodos_unicos
 )
+
+# Configurações de Machine Learning (K-Means) na Barra Lateral
+st.sidebar.markdown("---")
+st.sidebar.subheader("🤖 Machine Learning (K-Means)")
+ativar_kmeans = st.sidebar.checkbox(
+    "Ativar Clusterização K-Means",
+    value=True,
+    help="Agrupa os estudantes em perfis de comportamento automaticamente com Scikit-Learn."
+)
+if ativar_kmeans:
+    k_clusters = st.sidebar.slider(
+        "Quantidade de Perfis (K):",
+        min_value=2,
+        max_value=5,
+        value=3,
+        step=1,
+        help="Número de grupos (perfis de alunos) a serem descobertos pelo K-Means."
+    )
+else:
+    k_clusters = 3
 
 # 6. Aplicação da Filtragem e Amostragem
 df_filtrado = df_raw.copy()
@@ -336,7 +365,7 @@ with col5:
     st.metric("Nível de Estresse", f"{estresse_medio:.1f} / 10")
 
 with col6:
-    uso_ia = (df_filtrado['favorite_AI_tool'] != 'None').mean() * 100
+    uso_ia = (df_filtrado['favorite_AI_tool'].fillna('None') != 'None').mean() * 100
     st.metric("Adoção de IA", f"{uso_ia:.1f}%")
 
 st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
@@ -348,7 +377,6 @@ st.caption("Visão comparativa de como cada hábito influencia diretamente o GPA
 col_hm1, col_hm2 = st.columns([1.3, 1.0])
 
 with col_hm1:
-    # Heatmap das correlações dos hábitos com GPA e Notas
     cols_corr = [
         'GPA', 'final_exam_score', 'class_attendance_percent',
         'study_hours_per_day', 'sleep_hours', 'mental_stress_level',
@@ -379,10 +407,9 @@ with col_hm1:
     )
     estilizar_grafico(fig_heatmap, "Matriz de Correlação dos Hábitos vs. Performance")
     fig_heatmap.update_layout(coloraxis_showscale=False)
-    st.plotly_chart(fig_heatmap, width="stretch")
+    st.plotly_chart(fig_heatmap, use_container_width=True)
 
 with col_hm2:
-    # Destaque dos Pilares de Alto e Baixo Impacto
     st.markdown("""
         <div style="background:#1E293B; border:1px solid #334155; border-radius:12px; padding:18px 20px; height:100%;">
             <h4 style="color:#38BDF8 !important; margin-top:0; font-size:1.05rem;">🏆 Os 2 Maiores Impulsionadores do GPA:</h4>
@@ -404,24 +431,33 @@ with col_hm2:
         </div>
     """, unsafe_allow_html=True)
 
-st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
-# 10. SEÇÃO: GRÁFICOS DE DISPERSÃO COM LINHAS DE TENDÊNCIA
-st.subheader("📈 Investigação Visual de Hábitos Críticos")
-st.caption("Dispersão detalhada com linha de tendência estimada para os principais fatores:")
+# 10. SEÇÃO: GRÁFICOS DE DISPERSÃO COM LINHAS DE TENDÊNCIA (SCATTER PLOTS)
+st.subheader("📈 Investigação Visual de Hábitos Críticos (Scatter Plots)")
+st.caption("Dispersão detalhada de cada aluno com linha de tendência estimada para os fatores essenciais:")
 
 def criar_scatter_com_tendencia(df_plot, col_x, col_y, label_x, label_y, titulo, cor_pontos, cor_linha):
+    tamanho_amostra = min(len(df_plot), 2500)
+    df_amostra = df_plot.sample(tamanho_amostra, random_state=42) if len(df_plot) > tamanho_amostra else df_plot
+    
     fig = px.scatter(
-        df_plot,
+        df_amostra,
         x=col_x,
         y=col_y,
-        opacity=0.6,
-        color_discrete_sequence=[cor_pontos],
         labels={col_x: label_x, col_y: label_y}
     )
+    fig.update_traces(
+        marker=dict(
+            color=cor_pontos,
+            size=6,
+            opacity=0.6,
+            line=dict(width=0.5, color="#0B1120")
+        )
+    )
     if len(df_plot) > 1 and df_plot[col_x].nunique() > 1:
-        x_vals = df_plot[col_x].values
-        y_vals = df_plot[col_y].values
+        x_vals = df_plot[col_x].astype(float).values
+        y_vals = df_plot[col_y].astype(float).values
         slope, intercept = np.polyfit(x_vals, y_vals, 1)
         x_line = np.linspace(x_vals.min(), x_vals.max(), 100)
         y_line = slope * x_line + intercept
@@ -429,12 +465,13 @@ def criar_scatter_com_tendencia(df_plot, col_x, col_y, label_x, label_y, titulo,
             x=x_line,
             y=y_line,
             mode='lines',
-            name=f'Tendência (Inclin: {slope:.3f})',
+            name=f'Tendência ({slope:+.3f})',
             line=dict(color=cor_linha, width=2.5, dash='dash')
         ))
     estilizar_grafico(fig, titulo)
     return fig
 
+# Linha 1 de Scatters (3 colunas)
 col_c1, col_c2, col_c3 = st.columns(3)
 
 with col_c1:
@@ -445,10 +482,10 @@ with col_c1:
         "Frequência às Aulas (%)",
         "GPA (0.0 a 4.0)",
         "Frequência às Aulas vs. GPA (r = +0.74)",
-        "#34D399",
+        ASTRA_COLORS["accent_emerald"],
         "#FFFFFF"
     )
-    st.plotly_chart(fig_freq_gpa, width="stretch")
+    st.plotly_chart(fig_freq_gpa, use_container_width=True)
 
 with col_c2:
     fig_redes_gpa = criar_scatter_com_tendencia(
@@ -458,10 +495,10 @@ with col_c2:
         "Horas em Redes Sociais / Dia",
         "GPA (0.0 a 4.0)",
         "Redes Sociais vs. GPA (r = -0.23)",
-        "#FBBF24",
+        ASTRA_COLORS["accent_amber"],
         "#FFFFFF"
     )
-    st.plotly_chart(fig_redes_gpa, width="stretch")
+    st.plotly_chart(fig_redes_gpa, use_container_width=True)
 
 with col_c3:
     fig_sono_gpa = criar_scatter_com_tendencia(
@@ -471,15 +508,15 @@ with col_c3:
         "Horas de Sono por Noite",
         "GPA (0.0 a 4.0)",
         "Sono Diário vs. GPA (r = +0.23)",
-        "#38BDF8",
+        ASTRA_COLORS["accent_cyan"],
         "#FFFFFF"
     )
-    st.plotly_chart(fig_sono_gpa, width="stretch")
+    st.plotly_chart(fig_sono_gpa, use_container_width=True)
 
-# Comparativo: Redes Sociais vs. Jogos (Gaming)
-col_sub1, col_sub2 = st.columns(2)
+# Linha 2 de Scatters (3 colunas)
+col_c4, col_c5, col_c6 = st.columns(3)
 
-with col_sub1:
+with col_c4:
     fig_tela_nota = criar_scatter_com_tendencia(
         df_filtrado,
         "screen_time_hours",
@@ -487,12 +524,12 @@ with col_sub1:
         "Tempo de Tela Diário (Horas)",
         "Nota no Exame Final (0 a 100)",
         "Tempo de Tela vs. Exame Final (r = -0.08)",
-        "#F43F5E",
+        ASTRA_COLORS["accent_rose"],
         "#FFFFFF"
     )
-    st.plotly_chart(fig_tela_nota, width="stretch")
+    st.plotly_chart(fig_tela_nota, use_container_width=True)
 
-with col_sub2:
+with col_c5:
     fig_ia_gpa = criar_scatter_com_tendencia(
         df_filtrado,
         "AI_tool_usage_hours",
@@ -500,20 +537,107 @@ with col_sub2:
         "Horas de Uso de IA / Dia",
         "GPA (0.0 a 4.0)",
         "Uso de IA vs. GPA (r = +0.03)",
-        "#818CF8",
+        ASTRA_COLORS["accent_indigo"],
         "#FFFFFF"
     )
-    st.plotly_chart(fig_ia_gpa, width="stretch")
+    st.plotly_chart(fig_ia_gpa, use_container_width=True)
 
-st.markdown("---")
+with col_c6:
+    fig_exercicio_estresse = criar_scatter_com_tendencia(
+        df_filtrado,
+        "exercise_hours_per_week",
+        "mental_stress_level",
+        "Exercício Físico (Horas/Semana)",
+        "Nível de Estresse (0 a 10)",
+        "Exercício Físico vs. Estresse (r = -0.15)",
+        ASTRA_COLORS["accent_teal"],
+        "#FFFFFF"
+    )
+    st.plotly_chart(fig_exercicio_estresse, use_container_width=True)
 
-# 11. Linha de Gráficos de Hábitos
+st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
+
+# 11. SEÇÃO: CONTROLE DE VIESES & DISTRIBUIÇÃO DEMOGRÁFICA (GRÁFICOS DE PIZZA / DONUT)
+st.subheader("🥧 Análise Demográfica & Controle de Vieses")
+st.caption("Gráficos de proporção para verificar a representatividade da amostra e evitar conclusões enviesadas:")
+
+col_pz1, col_pz2, col_pz3, col_pz4 = st.columns(4)
+
+with col_pz1:
+    df_gen = df_filtrado['gender'].value_counts().reset_index()
+    df_gen.columns = ['Gênero', 'Total']
+    fig_pz_gen = px.pie(
+        df_gen,
+        names='Gênero',
+        values='Total',
+        hole=0.45,
+        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"], ASTRA_COLORS["accent_rose"], ASTRA_COLORS["accent_amber"]]
+    )
+    fig_pz_gen.update_traces(textposition='inside', textinfo='percent+label')
+    estilizar_grafico(fig_pz_gen, "Distribuição por Gênero")
+    fig_pz_gen.update_layout(showlegend=False)
+    st.plotly_chart(fig_pz_gen, use_container_width=True)
+
+with col_pz2:
+    df_renda = df_filtrado['family_income_level'].value_counts().reset_index()
+    df_renda.columns = ['Renda', 'Total']
+    fig_pz_renda = px.pie(
+        df_renda,
+        names='Renda',
+        values='Total',
+        hole=0.45,
+        color_discrete_sequence=[ASTRA_COLORS["accent_emerald"], ASTRA_COLORS["accent_amber"], ASTRA_COLORS["accent_rose"]]
+    )
+    fig_pz_renda.update_traces(textposition='inside', textinfo='percent+label')
+    estilizar_grafico(fig_pz_renda, "Renda Familiar")
+    fig_pz_renda.update_layout(showlegend=False)
+    st.plotly_chart(fig_pz_renda, use_container_width=True)
+
+with col_pz3:
+    df_job = df_filtrado['part_time_job'].replace({'Yes': 'Trabalha', 'No': 'Não Trabalha'}).value_counts().reset_index()
+    df_job.columns = ['Trabalho', 'Total']
+    fig_pz_job = px.pie(
+        df_job,
+        names='Trabalho',
+        values='Total',
+        hole=0.45,
+        color_discrete_sequence=[ASTRA_COLORS["accent_indigo"], ASTRA_COLORS["accent_teal"]]
+    )
+    fig_pz_job.update_traces(textposition='inside', textinfo='percent+label')
+    estilizar_grafico(fig_pz_job, "Trabalho Meio Período")
+    fig_pz_job.update_layout(showlegend=False)
+    st.plotly_chart(fig_pz_job, use_container_width=True)
+
+with col_pz4:
+    df_net = df_filtrado['internet_quality'].value_counts().reset_index()
+    df_net.columns = ['Internet', 'Total']
+    fig_pz_net = px.pie(
+        df_net,
+        names='Internet',
+        values='Total',
+        hole=0.45,
+        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"], ASTRA_COLORS["accent_indigo"], ASTRA_COLORS["accent_rose"]]
+    )
+    fig_pz_net.update_traces(textposition='inside', textinfo='percent+label')
+    estilizar_grafico(fig_pz_net, "Qualidade da Internet")
+    fig_pz_net.update_layout(showlegend=False)
+    st.plotly_chart(fig_pz_net, use_container_width=True)
+
+st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
+
+# 12. SEÇÃO: HÁBITOS, METODOLOGIAS & DISTRIBUIÇÃO ACADÊMICA
+st.subheader("📊 Hábitos de Estudo, Métodos & Rendimento por Curso")
+
 col_g1, col_g2 = st.columns(2)
 
 with col_g1:
-    st.subheader("Relação: Horas de Estudo vs. GPA")
+    st.caption("Relação: Horas de Estudo vs. GPA com dispersão contínua por Nível de Estresse:")
+    df_disp = df_filtrado.copy()
+    df_disp['favorite_AI_tool'] = df_disp['favorite_AI_tool'].fillna('Nenhuma')
+    df_disp_amostra = df_disp.sample(min(len(df_disp), 2500), random_state=42) if len(df_disp) > 2500 else df_disp
+    
     fig_disp = px.scatter(
-        df_filtrado,
+        df_disp_amostra,
         x="study_hours_per_day",
         y="GPA",
         color="mental_stress_level",
@@ -524,13 +648,14 @@ with col_g1:
             "mental_stress_level": "Nível de Estresse"
         },
         color_continuous_scale=["#38BDF8", "#818CF8", "#F43F5E"],
-        opacity=0.85
+        opacity=0.75
     )
+    fig_disp.update_traces(marker=dict(size=6))
     estilizar_grafico(fig_disp, "Impacto do Estudo Diário no Desempenho (GPA)")
-    st.plotly_chart(fig_disp, width="stretch")
+    st.plotly_chart(fig_disp, use_container_width=True)
 
 with col_g2:
-    st.subheader("Faixas de Sono vs. Nível de Estresse")
+    st.caption("Distribuição do Nível de Estresse por Faixas de Sono Diário:")
     df_filtrado['faixa_sono'] = pd.cut(
         df_filtrado['sleep_hours'],
         bins=[0, 5, 7, 9, 24],
@@ -552,27 +677,26 @@ with col_g2:
     )
     estilizar_grafico(fig_box, "Estresse Reportado por Faixa de Descanso")
     fig_box.update_layout(showlegend=False)
-    st.plotly_chart(fig_box, width="stretch")
+    st.plotly_chart(fig_box, use_container_width=True)
 
-# 12. Linha de Gráficos Categóricos
 col_g3, col_g4 = st.columns(2)
 
 with col_g3:
-    st.subheader("Ferramentas de IA mais Usadas")
-    df_ia = df_filtrado[df_filtrado['favorite_AI_tool'] != 'None']
-    fig_ia = px.histogram(
-        df_ia,
-        x="favorite_AI_tool",
-        color="favorite_AI_tool",
+    st.caption("Distribuição do GPA Acadêmico entre os diferentes Cursos de Graduação:")
+    fig_box_major = px.box(
+        df_filtrado,
+        x="major",
+        y="GPA",
+        color="major",
         color_discrete_sequence=CATEGORICAL_PALETTE,
-        labels={"favorite_AI_tool": "Ferramenta de IA", "count": "Quantidade de Estudantes"}
+        labels={"major": "Curso", "GPA": "GPA Acadêmico"}
     )
-    estilizar_grafico(fig_ia, "Distribuição das Ferramentas de IA Preferidas")
-    fig_ia.update_layout(showlegend=False)
-    st.plotly_chart(fig_ia, width="stretch")
+    estilizar_grafico(fig_box_major, "Distribuição do GPA por Curso")
+    fig_box_major.update_layout(showlegend=False)
+    st.plotly_chart(fig_box_major, use_container_width=True)
 
 with col_g4:
-    st.subheader("Média no Exame Final por Método de Estudo")
+    st.caption("Eficácia do Método de Anotação no Exame Final:")
     df_metodo = df_filtrado.groupby("note_taking_method", as_index=False)["final_exam_score"].mean().round(1)
     fig_metodo = px.bar(
         df_metodo,
@@ -589,8 +713,177 @@ with col_g4:
     )
     estilizar_grafico(fig_metodo, "Eficácia Média do Método de Anotação no Exame")
     fig_metodo.update_layout(showlegend=False, yaxis_range=[80, 105])
-    st.plotly_chart(fig_metodo, width="stretch")
+    st.plotly_chart(fig_metodo, use_container_width=True)
 
-# 13. Tabela de Amostra dos Dados
+col_g5, col_g6 = st.columns(2)
+
+with col_g5:
+    st.caption("Ferramentas de Inteligência Artificial mais utilizadas pelos estudantes:")
+    df_ia = df_filtrado[df_filtrado['favorite_AI_tool'].fillna('None') != 'None']
+    fig_ia = px.histogram(
+        df_ia,
+        x="favorite_AI_tool",
+        color="favorite_AI_tool",
+        color_discrete_sequence=CATEGORICAL_PALETTE,
+        labels={"favorite_AI_tool": "Ferramenta de IA", "count": "Quantidade de Estudantes"}
+    )
+    estilizar_grafico(fig_ia, "Distribuição das Ferramentas de IA Preferidas")
+    fig_ia.update_layout(showlegend=False)
+    st.plotly_chart(fig_ia, use_container_width=True)
+
+with col_g6:
+    st.caption("Relação entre Consumo Diário de Café e Horas Médias de Sono:")
+    df_cafe = df_filtrado.groupby("coffee_consumption_per_day", as_index=False)["sleep_hours"].mean().round(2)
+    fig_cafe = px.bar(
+        df_cafe,
+        x="coffee_consumption_per_day",
+        y="sleep_hours",
+        color="coffee_consumption_per_day",
+        color_continuous_scale=["#38BDF8", "#FBBF24", "#F43F5E"],
+        text_auto=".2f",
+        labels={"coffee_consumption_per_day": "Xícaras de Café / Dia", "sleep_hours": "Média de Sono (Horas)"}
+    )
+    estilizar_grafico(fig_cafe, "Consumo de Café vs. Horas de Sono Médio")
+    fig_cafe.update_layout(coloraxis_showscale=False)
+    st.plotly_chart(fig_cafe, use_container_width=True)
+
+st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
+
+# 13. SEÇÃO: CLUSTERIZAÇÃO K-MEANS & PERFIS AUTOMÁTICOS
+if ativar_kmeans:
+    st.markdown("---")
+    st.subheader("🤖 Segmentação Inteligente de Perfis (K-Means Clustering)")
+    
+    if not SKLEARN_DISPONIVEL:
+        st.warning("⚠️ O pacote `scikit-learn` está sendo instalado ou não foi encontrado. Para habilitar esta seção, execute: `pip install scikit-learn`")
+    elif len(df_filtrado) < k_clusters:
+        st.info("ℹ️ Dados insuficientes para o número de clusters selecionado.")
+    else:
+        st.caption(
+            "O algoritmo de **Machine Learning (Scikit-Learn)** analisa simultaneamente hábitos de estudo, sono, estresse, presença, redes sociais e rendimento "
+            f"para agrupar os **{len(df_filtrado):,}** estudantes em **{k_clusters} perfis comportamentais**:"
+        )
+        
+        features_kmeans = [
+            'study_hours_per_day', 'sleep_hours', 'mental_stress_level',
+            'class_attendance_percent', 'social_media_hours', 'GPA'
+        ]
+        
+        # Normalização com StandardScaler e treinamento do KMeans
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(df_filtrado[features_kmeans].fillna(df_filtrado[features_kmeans].mean()))
+        
+        kmeans_model = KMeans(n_clusters=k_clusters, random_state=42, n_init=10)
+        df_filtrado['cluster_id'] = kmeans_model.fit_predict(X_scaled)
+        
+        # Rótulos automáticos ordenados por desempenho acadêmico (GPA)
+        medias_cluster = df_filtrado.groupby('cluster_id')[features_kmeans].mean()
+        ordem_gpa = medias_cluster['GPA'].sort_values(ascending=False).index.tolist()
+        
+        cores_cluster_map = [
+            ASTRA_COLORS["accent_emerald"],  # Top 1
+            ASTRA_COLORS["accent_cyan"],     # Top 2
+            ASTRA_COLORS["accent_indigo"],   # Top 3
+            ASTRA_COLORS["accent_amber"],    # Top 4
+            ASTRA_COLORS["accent_rose"]      # Top 5
+        ]
+        
+        rotulos_sugeridos = [
+            "🎓 Perfil 1: Alto Desempenho & Foco",
+            "⚖️ Perfil 2: Rendimento Equilibrado",
+            "⚡ Perfil 3: Tensão & Risco de Burnout",
+            "⚠️ Perfil 4: Desengajamento / Baixa Assiduidade",
+            "🔄 Perfil 5: Hábitos Mistos"
+        ]
+        
+        mapa_nomes = {}
+        for rank, cid in enumerate(ordem_gpa):
+            mapa_nomes[cid] = rotulos_sugeridos[rank] if rank < len(rotulos_sugeridos) else f"Perfil {rank+1}"
+            
+        df_filtrado['perfil_cluster'] = df_filtrado['cluster_id'].map(mapa_nomes)
+        
+        # Cards com Métricas dos Perfis
+        col_k_cards = st.columns(k_clusters)
+        for i, cid in enumerate(ordem_gpa):
+            qtd_c = (df_filtrado['cluster_id'] == cid).sum()
+            pct_c = (qtd_c / len(df_filtrado)) * 100
+            gpa_c = medias_cluster.loc[cid, 'GPA']
+            estresse_c = medias_cluster.loc[cid, 'mental_stress_level']
+            freq_c = medias_cluster.loc[cid, 'class_attendance_percent']
+            with col_k_cards[i]:
+                cor_card = cores_cluster_map[i % len(cores_cluster_map)]
+                st.markdown(f"""
+                    <div style="background:#1E293B; border:1px solid #334155; border-top:3px solid {cor_card}; border-radius:10px; padding:12px 14px; margin-bottom:15px;">
+                        <div style="font-size:0.83rem; font-weight:700; color:#F8FAFC;">{mapa_nomes[cid]}</div>
+                        <div style="font-size:1.45rem; font-weight:800; color:{cor_card}; margin:3px 0;">{qtd_c:,} <span style="font-size:0.82rem; color:#94A3B8;">({pct_c:.1f}%)</span></div>
+                        <div style="font-size:0.77rem; color:#CBD5E1;">GPA: <b>{gpa_c:.2f}</b> • Presença: <b>{freq_c:.0f}%</b> • Estresse: <b>{estresse_c:.1f}</b></div>
+                    </div>
+                """, unsafe_allow_html=True)
+        
+        # Gráficos da Clusterização
+        col_km1, col_km2 = st.columns(2)
+        
+        with col_km1:
+            df_cluster_sample = df_filtrado.sample(min(len(df_filtrado), 2500), random_state=42) if len(df_filtrado) > 2500 else df_filtrado
+            fig_km_scatter = px.scatter(
+                df_cluster_sample,
+                x="class_attendance_percent",
+                y="GPA",
+                color="perfil_cluster",
+                color_discrete_sequence=[cores_cluster_map[ordem_gpa.index(cid) % len(cores_cluster_map)] for cid in sorted(df_filtrado['cluster_id'].unique())],
+                labels={"class_attendance_percent": "Frequência às Aulas (%)", "GPA": "GPA Acadêmico (0 a 4.0)", "perfil_cluster": "Perfil K-Means"},
+                hover_data=["study_hours_per_day", "mental_stress_level", "sleep_hours"]
+            )
+            fig_km_scatter.update_traces(marker=dict(size=6, opacity=0.75))
+            estilizar_grafico(fig_km_scatter, "Dispersão dos Perfis: Frequência vs. GPA")
+            st.plotly_chart(fig_km_scatter, use_container_width=True)
+            
+        with col_km2:
+            nomes_labels = {
+                'study_hours_per_day': 'Estudo (h/dia)',
+                'sleep_hours': 'Sono (h/noite)',
+                'mental_stress_level': 'Estresse (0-10)',
+                'social_media_hours': 'Redes Sociais (h)'
+            }
+            df_plot_bars = df_filtrado.groupby('perfil_cluster')[['study_hours_per_day', 'sleep_hours', 'mental_stress_level', 'social_media_hours']].mean().reset_index()
+            df_plot_melt = df_plot_bars.melt(id_vars=['perfil_cluster'], var_name='Hábito', value_name='Média')
+            df_plot_melt['Hábito'] = df_plot_melt['Hábito'].map(nomes_labels)
+            
+            fig_km_bars = px.bar(
+                df_plot_melt,
+                x="Hábito",
+                y="Média",
+                color="perfil_cluster",
+                barmode="group",
+                color_discrete_sequence=CATEGORICAL_PALETTE,
+                labels={"Média": "Média do Hábito", "perfil_cluster": "Perfil"}
+            )
+            estilizar_grafico(fig_km_bars, "Comparativo dos Hábitos Médios entre os Perfis")
+            st.plotly_chart(fig_km_bars, use_container_width=True)
+        
+        # Tabela Resumo dos Perfis K-Means
+        with st.expander("📊 Ver Tabela Comparativa Detalhada dos Perfis K-Means"):
+            df_resumo_tabela = df_filtrado.groupby('perfil_cluster')[features_kmeans + ['final_exam_score']].agg({
+                'GPA': 'mean',
+                'final_exam_score': 'mean',
+                'class_attendance_percent': 'mean',
+                'study_hours_per_day': 'mean',
+                'sleep_hours': 'mean',
+                'mental_stress_level': 'mean',
+                'social_media_hours': 'mean'
+            }).round(2).rename(columns={
+                'GPA': 'GPA Médio',
+                'final_exam_score': 'Nota Exame',
+                'class_attendance_percent': 'Frequência (%)',
+                'study_hours_per_day': 'Estudo (h)',
+                'sleep_hours': 'Sono (h)',
+                'mental_stress_level': 'Estresse (0-10)',
+                'social_media_hours': 'Redes Sociais (h)'
+            })
+            st.dataframe(df_resumo_tabela, use_container_width=True)
+
+st.markdown("---")
+
+# 14. Tabela de Amostra dos Dados
 with st.expander(f"🔍 Visualizar Amostra dos Dados Analisados (Primeiras 100 de {len(df_filtrado):,} linhas)"):
-    st.dataframe(df_filtrado.head(100), width="stretch")
+    st.dataframe(df_filtrado.head(100), use_container_width=True)
