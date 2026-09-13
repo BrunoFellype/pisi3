@@ -5,6 +5,8 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
+
+
 try:
     from sklearn.cluster import KMeans
     from sklearn.preprocessing import StandardScaler
@@ -332,6 +334,53 @@ if len(df_filtrado) > qtd_analise:
 
 # 7. Cabeçalho Principal
 st.title("ASTRA Analytics — Painel de Hábitos & Desempenho Acadêmico")
+    #SEÇÃO: VISÃo GERAL, OBJETIVOS E HIPÓTESES
+with st.expander("📌 Sobre o Projeto ASTRA, Objetivos e Questões Norteadoras", expanded=False):
+    st.markdown("### 💡 Objetivo Principal")
+    st.write(
+        "Desenvolver uma plataforma analítica e preditiva que centraliza a rotina "
+        "acadêmica universitária, correlacionando hábitos de estudo, sono, bem-estar e "
+        "uso de ferramentas tecnológicas para antecipar o desempenho acadêmico (GPA) "
+        "e mitigar o risco de sobrecarga estudantil."
+    )
+
+    st.markdown("### 🎯 Objetivos Secundários")
+    st.markdown("""
+    * **Investigação Exploratória:** Realizar a limpeza, transformação e análise exploratória de dados multivariados sobre hábitos de 10.000 estudantes universitários via Streamlit.
+    * **Identificação de Fatores Críticos:** Mapear correlações estatísticas entre indicadores comportamentais (horas de estudo, qualidade de sono, estresse, frequência e redes sociais) e o rendimento acadêmico final.
+    * **Modelagem Preditiva:** Estruturar modelos de regressão capazes de estimar a pontuação acadêmica com base em registros diários de baixo atrito.
+    * **Interface de Suporte à Decisão:** Disponibilizar um painel interativo intuitivo que transforme métricas estatísticas em recomendações práticas para a rotina do estudante.
+    """)
+
+    st.markdown("---")
+    st.markdown("### ❓ Perguntas Norteadoras da Pesquisa")
+    
+    st.markdown("**1. De que maneira o equilíbrio entre horas de sono e nível de estresse modula o impacto das horas de estudo no desempenho acadêmico (GPA)?**")
+    st.info(
+        "**Justificativa e Importância:** Na cultura universitária predomina a crença de que quanto mais horas de estudo diárias, "
+        "melhor o rendimento. No entanto, dados empíricos indicam que noites de sono reduzidas e níveis elevados de estresse geram "
+        "saturação cognitiva, diminuindo a retenção de conteúdo. Investigar essa relação permite identificar o 'ponto de retorno decrescente' "
+        "do esforço e validar a tese central do ASTRA: orientar o aluno a dormir melhor e gerenciar o estresse pode produzir um GPA superior "
+        "ao de simplesmente aumentar as horas de estudo sem descanso."
+    )
+
+    st.markdown("**2. Qual é a correlação do uso de ferramentas de Inteligência Artificial no desempenho dos estudantes quando contrastado com o tempo gasto em redes sociais e a frequência às aulas?**")
+    st.info(
+        "**Justificativa e Importância:** A rápida adoção de ferramentas de IA generativa no meio acadêmico cria um cenário ainda pouco mapeado: "
+        "a IA funciona como potencializadora de aprendizado ou como atalho superficial? Ao cruzar o tempo de uso de IA com a presença em sala "
+        "de aula e o tempo em redes sociais, o projeto extrai padrões comportamentais do estudante moderno, permitindo ao ASTRA calibrar se "
+        "o uso da tecnologia está associado a ganho real de produtividade ou a dispersão."
+    )
+
+    #SEÇÃO: DICIONÁRIO DE DADOS
+with st.expander("📖 Dicionário de Dados do Dataset", expanded=False):
+    dict_path = os.path.join(os.path.dirname(__file__), "..", "Data", "dicionario_de_dados.md")
+    if os.path.exists(dict_path):
+        with open(dict_path, "r", encoding="utf-8") as f:
+            st.markdown(f.read())
+    else:
+        st.write("Consulte o arquivo Data/dicionario_de_dados.md no repositório.")
+
 st.caption(
     f"Exibindo dados de **{len(df_filtrado):,}** estudantes analisados "
     f"(de um total de **{total_registros:,}** disponíveis na base)."
