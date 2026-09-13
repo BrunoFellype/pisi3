@@ -334,7 +334,7 @@ if len(df_filtrado) > qtd_analise:
 
 # 7. Cabeçalho Principal
 st.title("ASTRA Analytics — Painel de Hábitos & Desempenho Acadêmico")
-    #SEÇÃO: VISÃo GERAL, OBJETIVOS E HIPÓTESES
+# SEÇÃO: VISÃO GERAL, OBJETIVOS E HIPÓTESES
 with st.expander("📌 Sobre o Projeto ASTRA, Objetivos e Questões Norteadoras", expanded=False):
     st.markdown("### 💡 Objetivo Principal")
     st.write(
@@ -372,7 +372,7 @@ with st.expander("📌 Sobre o Projeto ASTRA, Objetivos e Questões Norteadoras"
         "o uso da tecnologia está associado a ganho real de produtividade ou a dispersão."
     )
 
-    #SEÇÃO: DICIONÁRIO DE DADOS
+# SEÇÃO: DICIONÁRIO DE DADOS
 with st.expander("📖 Dicionário de Dados do Dataset", expanded=False):
     dict_path = os.path.join(os.path.dirname(__file__), "..", "Data", "dicionario_de_dados.md")
     if os.path.exists(dict_path):
