@@ -5,6 +5,14 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
+from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from data.load import get_Dataset
 from analysis.clusters import executar_kmeans
 from visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
@@ -100,6 +108,188 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 4. Carregamento dos Dados com Cache
+@st.cache_data
+def carregar_dados():
+    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+    caminhos = [
+        os.path.join(diretorio_atual, "global_university_students_performance_habits_10000.csv"),
+        os.path.join(diretorio_atual, "..", "Data", "global_university_students_performance_habits_10000.csv"),
+        "global_university_students_performance_habits_10000.csv",
+        os.path.join("Data", "global_university_students_performance_habits_10000.csv"),
+        os.path.join("ASTRA_Dashboard", "global_university_students_performance_habits_10000.csv"),
+    ]
+    for caminho in caminhos:
+        if os.path.exists(caminho):
+            return pd.read_csv(caminho)
+    raise FileNotFoundError("Arquivo de dados CSV não encontrado.")
+
+# ============================================================
+# MOTOR PREDITIVO - ASTRA
+# ============================================================
+
+def gpa_para_nota(gpa):
+    """
+    Converte GPA da escala 0–4 para uma escala de 0–10.
+    """
+    return (gpa / 4) * 10
+
+@st.cache_resource
+def treinar_motor_preditivo(df):
+    """
+    Treina e compara modelos para previsão do GPA.
+    """
+
+    # Variáveis utilizadas para previsão
+    features_numericas = [
+        "study_hours_per_day",
+        "sleep_hours",
+        "mental_stress_level",
+        "class_attendance_percent",
+        "social_media_hours",
+        "age"
+    ]
+
+    # Verifica quais colunas realmente existem
+    features_numericas = [
+        col for col in features_numericas
+        if col in df.columns
+    ]
+
+    features = features_numericas
+
+    if "GPA" not in df.columns:
+        raise ValueError("A coluna GPA não foi encontrada no dataset.")
+
+    if len(features) == 0:
+        raise ValueError(
+            "Nenhuma variável adequada para previsão foi encontrada."
+        )
+
+    # --------------------------------------------------------
+    # Dados
+    # --------------------------------------------------------
+
+    dados = df[features + ["GPA"]].copy()
+
+    # Remove registros sem GPA
+    dados = dados.dropna(subset=["GPA"])
+
+    X = dados[features]
+    y = dados["GPA"]
+
+    # --------------------------------------------------------
+    # Separação treino / teste
+    # --------------------------------------------------------
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.20,
+        random_state=42
+    )
+
+    # --------------------------------------------------------
+    # Pré-processamento
+    # --------------------------------------------------------
+
+    transformers = []
+
+    if features_numericas:
+        pipeline_numerica = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler())
+        ])
+
+        transformers.append(
+            ("numericas", pipeline_numerica, features_numericas)
+        )
+
+    
+    preprocessor = ColumnTransformer(
+        transformers=transformers
+    )
+
+    # --------------------------------------------------------
+    # Modelos
+    # --------------------------------------------------------
+
+    modelos = {
+        "Regressão Linear": LinearRegression(),
+
+        "Random Forest": RandomForestRegressor(
+            n_estimators=300,
+            max_depth=10,
+            min_samples_leaf=3,
+            random_state=42,
+            n_jobs=-1
+        ),
+
+        "Gradient Boosting": GradientBoostingRegressor(
+            n_estimators=200,
+            learning_rate=0.05,
+            max_depth=3,
+            random_state=42
+        )
+    }
+
+    resultados = []
+    modelos_treinados = {}
+
+    # --------------------------------------------------------
+    # Treinamento e avaliação
+    # --------------------------------------------------------
+
+    for nome, modelo in modelos.items():
+
+        pipeline = Pipeline([
+            ("preprocessamento", preprocessor),
+            ("modelo", modelo)
+        ])
+
+        pipeline.fit(X_train, y_train)
+
+        previsoes = pipeline.predict(X_test)
+
+        mae = mean_absolute_error(y_test, previsoes)
+        rmse = np.sqrt(mean_squared_error(y_test, previsoes))
+        r2 = r2_score(y_test, previsoes)
+
+        resultados.append({
+            "Modelo": nome,
+            "MAE": mae,
+            "RMSE": rmse,
+            "R²": r2
+        })
+
+        modelos_treinados[nome] = pipeline
+
+    resultados_df = pd.DataFrame(resultados)
+
+    # --------------------------------------------------------
+    # Seleção do melhor modelo
+    # --------------------------------------------------------
+    # Maior R² = melhor capacidade explicativa
+    # Em caso de empate, menor RMSE
+
+    resultados_df = resultados_df.sort_values(
+        by=["R²", "RMSE"],
+        ascending=[False, True]
+    ).reset_index(drop=True)
+
+    melhor_modelo_nome = resultados_df.iloc[0]["Modelo"]
+    melhor_modelo = modelos_treinados[melhor_modelo_nome]
+
+    return {
+        "modelo": melhor_modelo,
+        "nome": melhor_modelo_nome,
+        "modelos": modelos_treinados,
+        "resultados": resultados_df,
+        "features": features,
+        "features_numericas": features_numericas,
+        "X_test": X_test,
+        "y_test": y_test
+    }
+
 # @st.cache_data
 try:
     df_raw = get_Dataset()
@@ -573,7 +763,339 @@ with col_g6:
 
 st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
-# 13. SEÇÃO: CLUSTERIZAÇÃO K-MEANS & PERFIS AUTOMÁTICOS
+# ============================================================
+# 13. MOTOR PREDITIVO
+# ============================================================
+
+st.markdown("---")
+st.subheader("🔮 Motor Preditivo de Desempenho Acadêmico")
+
+st.caption(
+    "O ASTRA utiliza Machine Learning para estimar o GPA a partir "
+    "de hábitos e características acadêmicas do estudante."
+)
+
+if not SKLEARN_DISPONIVEL:
+
+    st.warning(
+        "⚠️ O pacote scikit-learn não está disponível. "
+        "Execute: pip install scikit-learn"
+    )
+
+else:
+
+    try:
+
+        # ----------------------------------------------------
+        # Treinamento
+        # ----------------------------------------------------
+
+        motor = treinar_motor_preditivo(df_raw)
+
+        modelo_escolhido = motor["modelo"]
+        nome_modelo = motor["nome"]
+        resultados_modelos = motor["resultados"]
+
+        # ----------------------------------------------------
+        # Indicadores do motor
+        # ----------------------------------------------------
+
+        col1, col2, col3 = st.columns(3)
+
+        melhor_r2 = resultados_modelos.iloc[0]["R²"]
+        melhor_mae = resultados_modelos.iloc[0]["MAE"]
+        melhor_rmse = resultados_modelos.iloc[0]["RMSE"]
+
+        with col1:
+            st.metric(
+                "Modelo selecionado",
+                nome_modelo
+            )
+
+        with col2:
+            st.metric(
+                "R²",
+                f"{melhor_r2:.3f}"
+            )
+
+        with col3:
+            st.metric(
+                "Erro médio (MAE)",
+                f"{melhor_mae:.3f}"
+            )
+
+        st.markdown("### 📊 Comparação dos modelos")
+
+        tabela_modelos = resultados_modelos.copy()
+
+        tabela_modelos["MAE"] = tabela_modelos["MAE"].round(3)
+        tabela_modelos["RMSE"] = tabela_modelos["RMSE"].round(3)
+        tabela_modelos["R²"] = tabela_modelos["R²"].round(3)
+
+        st.dataframe(
+            tabela_modelos,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # ----------------------------------------------------
+        # Formulário de previsão
+        # ----------------------------------------------------
+
+        st.markdown("### 🎯 Simular desempenho de um estudante")
+
+        st.caption(
+            "Informe os hábitos do estudante para gerar uma estimativa."
+        )
+
+        col_a, col_b, col_c = st.columns(3)
+
+        with col_a:
+
+            estudo = st.number_input(
+                "Horas de estudo por dia",
+                min_value=0.0,
+                max_value=24.0,
+                value=4.0,
+                step=0.5
+            )
+
+            sono = st.number_input(
+                "Horas de sono por noite",
+                min_value=0.0,
+                max_value=24.0,
+                value=7.0,
+                step=0.5
+            )
+
+        with col_b:
+
+            estresse = st.slider(
+                "Nível de estresse",
+                min_value=0.0,
+                max_value=10.0,
+                value=5.0,
+                step=0.5
+            )
+
+            frequencia = st.slider(
+                "Frequência às aulas (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=80.0,
+                step=1.0
+            )
+
+        with col_c:
+
+            redes = st.number_input(
+                "Horas de redes sociais por dia",
+                min_value=0.0,
+                max_value=24.0,
+                value=2.0,
+                step=0.5
+            )
+
+            idade = st.number_input(
+                "Idade",
+                min_value=10,
+                max_value=100,
+                value=20,
+                step=1
+            )
+
+
+        # ----------------------------------------------------
+        # Botão de previsão
+        # ----------------------------------------------------
+
+        if st.button(
+            "🔮 Gerar previsão",
+            use_container_width=True
+        ):
+
+            dados_estudante = {}
+
+            if "study_hours_per_day" in motor["features"]:
+                dados_estudante[
+                    "study_hours_per_day"
+                ] = estudo
+
+            if "sleep_hours" in motor["features"]:
+                dados_estudante[
+                    "sleep_hours"
+                ] = sono
+
+            if "mental_stress_level" in motor["features"]:
+                dados_estudante[
+                    "mental_stress_level"
+                ] = estresse
+
+            if "class_attendance_percent" in motor["features"]:
+                dados_estudante[
+                    "class_attendance_percent"
+                ] = frequencia
+
+            if "social_media_hours" in motor["features"]:
+                dados_estudante[
+                    "social_media_hours"
+                ] = redes
+
+            if "age" in motor["features"]:
+                dados_estudante[
+                    "age"
+                ] = idade
+
+            entrada = pd.DataFrame(
+                [dados_estudante],
+                columns=motor["features"]
+            )
+
+            # ------------------------------------------------
+            # Previsão
+            # ------------------------------------------------
+
+            gpa_previsto = modelo_escolhido.predict(entrada)[0]
+
+            # Limita ao intervalo esperado do GPA
+            gpa_previsto = max(0, min(4, gpa_previsto))
+
+            # Converte para escala de 0 a 10
+            nota_prevista = gpa_para_nota(gpa_previsto)
+            # ------------------------------------------------
+            # Classificação
+            # ------------------------------------------------
+
+            if gpa_previsto >= 3.5:
+
+                classificacao = "Alto desempenho"
+                icone = "🟢"
+
+            elif gpa_previsto >= 2.5:
+
+                classificacao = "Desempenho intermediário"
+                icone = "🟡"
+
+            else:
+
+                classificacao = "Atenção ao desempenho"
+                icone = "🔴"
+
+            st.markdown("---")
+
+            resultado_col1, resultado_col2 = st.columns(2)
+
+            with resultado_col1:
+
+                st.metric(
+                    "GPA estimado",
+                    f"{gpa_previsto:.2f}"
+                )
+                st.caption(
+                    f"Equivalente a uma nota de {nota_prevista:.2f} na escala de 0–10."
+                )
+
+            with resultado_col2:
+
+                st.metric(
+                    "Classificação",
+                    f"{icone} {classificacao}"
+                )
+
+            st.info(
+                "Esta é uma estimativa estatística baseada nos padrões "
+                "encontrados no dataset. Ela não representa uma garantia "
+                "sobre o desempenho futuro de um estudante."
+            )
+
+        # ------------------------------------------------
+        # Importância das variáveis
+        # ------------------------------------------------
+
+        st.markdown("### 🧩 Importância das variáveis")
+
+        modelo_final = modelo_escolhido.named_steps["modelo"]
+
+        preprocessor_final = modelo_escolhido.named_steps[
+            "preprocessamento"
+        ]
+
+        if hasattr(modelo_final, "feature_importances_"):
+
+            importancias = modelo_final.feature_importances_
+
+            nomes_features = (
+                preprocessor_final
+                .get_feature_names_out()
+            )
+
+            nomes_amigaveis = {
+                "numericas__study_hours_per_day": "Horas de estudo por dia",
+                "numericas__sleep_hours": "Horas de sono por noite",
+                "numericas__mental_stress_level": "Nível de estresse",
+                "numericas__class_attendance_percent": "Frequência às aulas",
+                "numericas__social_media_hours": "Horas em redes sociais",
+                "numericas__age": "Idade"
+            }
+
+            df_importancia = pd.DataFrame({
+                "Variável": [
+                    nomes_amigaveis.get(nome, nome)
+                    for nome in nomes_features
+                ],
+                "Importância": importancias
+            })
+
+            # Converte a importância para percentual
+            df_importancia["Importância (%)"] = (
+                df_importancia["Importância"] * 100
+            )
+
+            df_importancia = (
+                df_importancia
+                .sort_values(
+                    "Importância (%)",
+                    ascending=False
+                )
+                .head(10)
+            )
+
+            fig_importancia = px.bar(
+                df_importancia,
+                x="Importância (%)",
+                y="Variável",
+                orientation="h",
+                title="Importância das variáveis no modelo"
+            )
+
+            fig_importancia.update_layout(
+                yaxis={"categoryorder": "total ascending"}
+            )
+
+            estilizar_grafico(
+                fig_importancia,
+                "Importância das Variáveis no Modelo"
+            )
+
+            st.plotly_chart(
+                fig_importancia,
+                use_container_width=True
+            )
+
+        else:
+
+            st.info(
+                "A importância das variáveis é exibida para modelos "
+                "baseados em árvores, como Random Forest e Gradient Boosting."
+            )
+
+    except Exception as erro:
+
+        st.error(
+            f"❌ Não foi possível executar o motor preditivo: {erro}"
+        )
+
+# 14. SEÇÃO: CLUSTERIZAÇÃO K-MEANS & PERFIS AUTOMÁTICOS
 if ativar_kmeans:
     st.markdown("---")
     st.subheader("🤖 Segmentação Inteligente de Perfis (K-Means Clustering)")
@@ -664,6 +1186,6 @@ if ativar_kmeans:
 
 st.markdown("---")
 
-# 14. Tabela de Amostra dos Dados
+# 15. Tabela de Amostra dos Dados
 with st.expander(f"🔍 Visualizar Amostra dos Dados Analisados (Primeiras 100 de {len(df_filtrado):,} linhas)"):
     st.dataframe(df_filtrado.head(100), use_container_width=True)
