@@ -31,3 +31,7 @@ desktop.ini
 # Streamlit secrets and runtime cache
 .streamlit/secrets.toml
 */.streamlit/secrets.toml
+
+# Documentos e Relatorios em PDF gerados localmente
+*.pdf
+docs/*.pdf
