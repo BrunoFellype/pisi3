@@ -5,7 +5,10 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
-
+from data.load import get_Dataset
+from analysis.clusters import executar_kmeans
+from visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
+from visualization.graphs import criar_scatter_com_tendencia, criar_heatmap_correlacao, criar_grafico_genero, criar_grafico_renda, criar_grafico_trabalho, criar_grafico_internet,criar_grafico_study_gpa, criar_grafico_sono_estresse, criar_grafico_gpa_major, criar_grafico_metodos_anotacao, criar_grafico_ia_tools, criar_grafico_cafe_sono, criar_grafico_clusters, criar_grafico_perfil_clusters
 
 try:
     from sklearn.cluster import KMeans
@@ -21,32 +24,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# 2. Paleta de Cores de Alto Contraste & Design Tokens ASTRA
-ASTRA_COLORS = {
-    "bg_dark": "#0B1120",
-    "card_dark": "#1E293B",
-    "border_subtle": "#334155",
-    "text_primary": "#F8FAFC",
-    "text_muted": "#94A3B8",
-    "accent_cyan": "#38BDF8",
-    "accent_indigo": "#818CF8",
-    "accent_emerald": "#34D399",
-    "accent_amber": "#FBBF24",
-    "accent_rose": "#F43F5E",
-    "accent_violet": "#A78BFA",
-    "accent_teal": "#2DD4BF"
-}
-
-CATEGORICAL_PALETTE = [
-    ASTRA_COLORS["accent_cyan"],
-    ASTRA_COLORS["accent_indigo"],
-    ASTRA_COLORS["accent_emerald"],
-    ASTRA_COLORS["accent_amber"],
-    ASTRA_COLORS["accent_rose"],
-    ASTRA_COLORS["accent_violet"],
-    ASTRA_COLORS["accent_teal"]
-]
 
 # 3. Estilização CSS Moderna
 st.markdown("""
@@ -122,57 +99,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Função auxiliar para padronizar o estilo dos gráficos Plotly
-def estilizar_grafico(fig, titulo=""):
-    fig.update_layout(
-        template="plotly_dark",
-        title={
-            "text": f"<b>{titulo}</b>",
-            "font": {"size": 15, "color": "#F8FAFC", "family": "Plus Jakarta Sans"}
-        },
-        paper_bgcolor=ASTRA_COLORS["card_dark"],
-        plot_bgcolor=ASTRA_COLORS["card_dark"],
-        font=dict(color="#E2E8F0", family="Plus Jakarta Sans"),
-        xaxis=dict(
-            gridcolor=ASTRA_COLORS["border_subtle"],
-            zerolinecolor=ASTRA_COLORS["border_subtle"],
-            tickfont=dict(color="#94A3B8", size=11),
-            title_font=dict(color="#CBD5E1", size=12)
-        ),
-        yaxis=dict(
-            gridcolor=ASTRA_COLORS["border_subtle"],
-            zerolinecolor=ASTRA_COLORS["border_subtle"],
-            tickfont=dict(color="#94A3B8", size=11),
-            title_font=dict(color="#CBD5E1", size=12)
-        ),
-        legend=dict(
-            font=dict(color="#CBD5E1", size=11),
-            bgcolor="rgba(15, 23, 42, 0.7)",
-            bordercolor=ASTRA_COLORS["border_subtle"],
-            borderwidth=1
-        ),
-        margin=dict(l=45, r=35, t=55, b=45)
-    )
-    return fig
-
 # 4. Carregamento dos Dados com Cache
-@st.cache_data
-def carregar_dados():
-    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
-    caminhos = [
-        os.path.join(diretorio_atual, "global_university_students_performance_habits_10000.csv"),
-        os.path.join(diretorio_atual, "..", "Data", "global_university_students_performance_habits_10000.csv"),
-        "global_university_students_performance_habits_10000.csv",
-        os.path.join("Data", "global_university_students_performance_habits_10000.csv"),
-        os.path.join("ASTRA_Dashboard", "global_university_students_performance_habits_10000.csv"),
-    ]
-    for caminho in caminhos:
-        if os.path.exists(caminho):
-            return pd.read_csv(caminho)
-    raise FileNotFoundError("Arquivo de dados CSV não encontrado.")
-
+# @st.cache_data
 try:
-    df_raw = carregar_dados()
+    df_raw = get_Dataset()
 except Exception as erro:
     st.error(f"Erro ao carregar o arquivo CSV: {erro}")
     st.stop()
@@ -446,16 +376,7 @@ with col_hm1:
     df_corr_sub = df_filtrado[cols_corr].rename(columns=nomes_amigaveis)
     corr_matrix = df_corr_sub.corr().round(2)
     
-    fig_heatmap = px.imshow(
-        corr_matrix,
-        text_auto=True,
-        aspect="auto",
-        color_continuous_scale=[ASTRA_COLORS["accent_rose"], "#1E293B", ASTRA_COLORS["accent_cyan"]],
-        zmin=-1, zmax=1,
-        title="Matriz de Correlação Linear (Pearson)"
-    )
-    estilizar_grafico(fig_heatmap, "Matriz de Correlação dos Hábitos vs. Performance")
-    fig_heatmap.update_layout(coloraxis_showscale=False)
+    fig_heatmap = criar_heatmap_correlacao(corr_matrix=corr_matrix, titulo="Matriz de Correlação dos Hábitos vs. Performance")
     st.plotly_chart(fig_heatmap, use_container_width=True)
 
 with col_hm2:
@@ -486,39 +407,6 @@ st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 st.subheader("📈 Investigação Visual de Hábitos Críticos (Scatter Plots)")
 st.caption("Dispersão detalhada de cada aluno com linha de tendência estimada para os fatores essenciais:")
 
-def criar_scatter_com_tendencia(df_plot, col_x, col_y, label_x, label_y, titulo, cor_pontos, cor_linha):
-    tamanho_amostra = min(len(df_plot), 2500)
-    df_amostra = df_plot.sample(tamanho_amostra, random_state=42) if len(df_plot) > tamanho_amostra else df_plot
-    
-    fig = px.scatter(
-        df_amostra,
-        x=col_x,
-        y=col_y,
-        labels={col_x: label_x, col_y: label_y}
-    )
-    fig.update_traces(
-        marker=dict(
-            color=cor_pontos,
-            size=6,
-            opacity=0.6,
-            line=dict(width=0.5, color="#0B1120")
-        )
-    )
-    if len(df_plot) > 1 and df_plot[col_x].nunique() > 1:
-        x_vals = df_plot[col_x].astype(float).values
-        y_vals = df_plot[col_y].astype(float).values
-        slope, intercept = np.polyfit(x_vals, y_vals, 1)
-        x_line = np.linspace(x_vals.min(), x_vals.max(), 100)
-        y_line = slope * x_line + intercept
-        fig.add_trace(go.Scatter(
-            x=x_line,
-            y=y_line,
-            mode='lines',
-            name=f'Tendência ({slope:+.3f})',
-            line=dict(color=cor_linha, width=2.5, dash='dash')
-        ))
-    estilizar_grafico(fig, titulo)
-    return fig
 
 # Linha 1 de Scatters (3 colunas)
 col_c1, col_c2, col_c3 = st.columns(3)
@@ -613,63 +501,19 @@ st.caption("Gráficos de proporção para verificar a representatividade da amos
 col_pz1, col_pz2, col_pz3, col_pz4 = st.columns(4)
 
 with col_pz1:
-    df_gen = df_filtrado['gender'].value_counts().reset_index()
-    df_gen.columns = ['Gênero', 'Total']
-    fig_pz_gen = px.pie(
-        df_gen,
-        names='Gênero',
-        values='Total',
-        hole=0.45,
-        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"], ASTRA_COLORS["accent_rose"], ASTRA_COLORS["accent_amber"]]
-    )
-    fig_pz_gen.update_traces(textposition='inside', textinfo='percent+label')
-    estilizar_grafico(fig_pz_gen, "Distribuição por Gênero")
-    fig_pz_gen.update_layout(showlegend=False)
+    fig_pz_gen = criar_grafico_genero(df_filtrado)
     st.plotly_chart(fig_pz_gen, use_container_width=True)
 
 with col_pz2:
-    df_renda = df_filtrado['family_income_level'].value_counts().reset_index()
-    df_renda.columns = ['Renda', 'Total']
-    fig_pz_renda = px.pie(
-        df_renda,
-        names='Renda',
-        values='Total',
-        hole=0.45,
-        color_discrete_sequence=[ASTRA_COLORS["accent_emerald"], ASTRA_COLORS["accent_amber"], ASTRA_COLORS["accent_rose"]]
-    )
-    fig_pz_renda.update_traces(textposition='inside', textinfo='percent+label')
-    estilizar_grafico(fig_pz_renda, "Renda Familiar")
-    fig_pz_renda.update_layout(showlegend=False)
+    fig_pz_renda = criar_grafico_renda(df_filtrado)
     st.plotly_chart(fig_pz_renda, use_container_width=True)
 
 with col_pz3:
-    df_job = df_filtrado['part_time_job'].replace({'Yes': 'Trabalha', 'No': 'Não Trabalha'}).value_counts().reset_index()
-    df_job.columns = ['Trabalho', 'Total']
-    fig_pz_job = px.pie(
-        df_job,
-        names='Trabalho',
-        values='Total',
-        hole=0.45,
-        color_discrete_sequence=[ASTRA_COLORS["accent_indigo"], ASTRA_COLORS["accent_teal"]]
-    )
-    fig_pz_job.update_traces(textposition='inside', textinfo='percent+label')
-    estilizar_grafico(fig_pz_job, "Trabalho Meio Período")
-    fig_pz_job.update_layout(showlegend=False)
+    fig_pz_job = criar_grafico_trabalho(df_filtrado)
     st.plotly_chart(fig_pz_job, use_container_width=True)
 
 with col_pz4:
-    df_net = df_filtrado['internet_quality'].value_counts().reset_index()
-    df_net.columns = ['Internet', 'Total']
-    fig_pz_net = px.pie(
-        df_net,
-        names='Internet',
-        values='Total',
-        hole=0.45,
-        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"], ASTRA_COLORS["accent_indigo"], ASTRA_COLORS["accent_rose"]]
-    )
-    fig_pz_net.update_traces(textposition='inside', textinfo='percent+label')
-    estilizar_grafico(fig_pz_net, "Qualidade da Internet")
-    fig_pz_net.update_layout(showlegend=False)
+    fig_pz_net = criar_grafico_internet(df_filtrado)
     st.plotly_chart(fig_pz_net, use_container_width=True)
 
 st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
@@ -685,22 +529,7 @@ with col_g1:
     df_disp['favorite_AI_tool'] = df_disp['favorite_AI_tool'].fillna('Nenhuma')
     df_disp_amostra = df_disp.sample(min(len(df_disp), 2500), random_state=42) if len(df_disp) > 2500 else df_disp
     
-    fig_disp = px.scatter(
-        df_disp_amostra,
-        x="study_hours_per_day",
-        y="GPA",
-        color="mental_stress_level",
-        hover_data=["major", "university_year", "favorite_AI_tool"],
-        labels={
-            "study_hours_per_day": "Horas de Estudo / Dia",
-            "GPA": "Média Acadêmica (GPA)",
-            "mental_stress_level": "Nível de Estresse"
-        },
-        color_continuous_scale=["#38BDF8", "#818CF8", "#F43F5E"],
-        opacity=0.75
-    )
-    fig_disp.update_traces(marker=dict(size=6))
-    estilizar_grafico(fig_disp, "Impacto do Estudo Diário no Desempenho (GPA)")
+    fig_disp = criar_grafico_study_gpa(df_disp_amostra)
     st.plotly_chart(fig_disp, use_container_width=True)
 
 with col_g2:
@@ -711,89 +540,35 @@ with col_g2:
         labels=["< 5h (Crítico)", "5h-7h (Alerta)", "7h-9h (Adequado)", "> 9h (Alto)"]
     )
     df_sono = df_filtrado.dropna(subset=['faixa_sono'])
-    fig_box = px.box(
-        df_sono,
-        x="faixa_sono",
-        y="mental_stress_level",
-        color="faixa_sono",
-        color_discrete_sequence=[
-            ASTRA_COLORS["accent_rose"],
-            ASTRA_COLORS["accent_amber"],
-            ASTRA_COLORS["accent_emerald"],
-            ASTRA_COLORS["accent_cyan"]
-        ],
-        labels={"faixa_sono": "Faixa de Sono", "mental_stress_level": "Nível de Estresse (1 a 10)"}
-    )
-    estilizar_grafico(fig_box, "Estresse Reportado por Faixa de Descanso")
-    fig_box.update_layout(showlegend=False)
+
+    fig_box = criar_grafico_sono_estresse(df_sono)
     st.plotly_chart(fig_box, use_container_width=True)
 
 col_g3, col_g4 = st.columns(2)
 
 with col_g3:
     st.caption("Distribuição do GPA Acadêmico entre os diferentes Cursos de Graduação:")
-    fig_box_major = px.box(
-        df_filtrado,
-        x="major",
-        y="GPA",
-        color="major",
-        color_discrete_sequence=CATEGORICAL_PALETTE,
-        labels={"major": "Curso", "GPA": "GPA Acadêmico"}
-    )
-    estilizar_grafico(fig_box_major, "Distribuição do GPA por Curso")
-    fig_box_major.update_layout(showlegend=False)
+
+    fig_box_major = criar_grafico_gpa_major(df_filtrado)
     st.plotly_chart(fig_box_major, use_container_width=True)
 
 with col_g4:
     st.caption("Eficácia do Método de Anotação no Exame Final:")
-    df_metodo = df_filtrado.groupby("note_taking_method", as_index=False)["final_exam_score"].mean().round(1)
-    fig_metodo = px.bar(
-        df_metodo,
-        x="note_taking_method",
-        y="final_exam_score",
-        color="note_taking_method",
-        color_discrete_sequence=[
-            ASTRA_COLORS["accent_cyan"],
-            ASTRA_COLORS["accent_indigo"],
-            ASTRA_COLORS["accent_emerald"]
-        ],
-        text_auto=".1f",
-        labels={"note_taking_method": "Método de Anotação", "final_exam_score": "Nota Média no Exame Final"}
-    )
-    estilizar_grafico(fig_metodo, "Eficácia Média do Método de Anotação no Exame")
-    fig_metodo.update_layout(showlegend=False, yaxis_range=[80, 105])
+
+    fig_metodo = criar_grafico_metodos_anotacao(df_filtrado)
     st.plotly_chart(fig_metodo, use_container_width=True)
 
 col_g5, col_g6 = st.columns(2)
 
 with col_g5:
     st.caption("Ferramentas de Inteligência Artificial mais utilizadas pelos estudantes:")
-    df_ia = df_filtrado[df_filtrado['favorite_AI_tool'].fillna('None') != 'None']
-    fig_ia = px.histogram(
-        df_ia,
-        x="favorite_AI_tool",
-        color="favorite_AI_tool",
-        color_discrete_sequence=CATEGORICAL_PALETTE,
-        labels={"favorite_AI_tool": "Ferramenta de IA", "count": "Quantidade de Estudantes"}
-    )
-    estilizar_grafico(fig_ia, "Distribuição das Ferramentas de IA Preferidas")
-    fig_ia.update_layout(showlegend=False)
+
+    fig_ia = criar_grafico_ia_tools(df_filtrado)
     st.plotly_chart(fig_ia, use_container_width=True)
 
 with col_g6:
     st.caption("Relação entre Consumo Diário de Café e Horas Médias de Sono:")
-    df_cafe = df_filtrado.groupby("coffee_consumption_per_day", as_index=False)["sleep_hours"].mean().round(2)
-    fig_cafe = px.bar(
-        df_cafe,
-        x="coffee_consumption_per_day",
-        y="sleep_hours",
-        color="coffee_consumption_per_day",
-        color_continuous_scale=["#38BDF8", "#FBBF24", "#F43F5E"],
-        text_auto=".2f",
-        labels={"coffee_consumption_per_day": "Xícaras de Café / Dia", "sleep_hours": "Média de Sono (Horas)"}
-    )
-    estilizar_grafico(fig_cafe, "Consumo de Café vs. Horas de Sono Médio")
-    fig_cafe.update_layout(coloraxis_showscale=False)
+    fig_cafe = criar_grafico_cafe_sono(df_filtrado)
     st.plotly_chart(fig_cafe, use_container_width=True)
 
 st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
@@ -812,23 +587,12 @@ if ativar_kmeans:
             "O algoritmo de **Machine Learning (Scikit-Learn)** analisa simultaneamente hábitos de estudo, sono, estresse, presença, redes sociais e rendimento "
             f"para agrupar os **{len(df_filtrado):,}** estudantes em **{k_clusters} perfis comportamentais**:"
         )
-        
         features_kmeans = [
-            'study_hours_per_day', 'sleep_hours', 'mental_stress_level',
-            'class_attendance_percent', 'social_media_hours', 'GPA'
-        ]
-        
-        # Normalização com StandardScaler e treinamento do KMeans
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(df_filtrado[features_kmeans].fillna(df_filtrado[features_kmeans].mean()))
-        
-        kmeans_model = KMeans(n_clusters=k_clusters, random_state=42, n_init=10)
-        df_filtrado['cluster_id'] = kmeans_model.fit_predict(X_scaled)
-        
-        # Rótulos automáticos ordenados por desempenho acadêmico (GPA)
-        medias_cluster = df_filtrado.groupby('cluster_id')[features_kmeans].mean()
-        ordem_gpa = medias_cluster['GPA'].sort_values(ascending=False).index.tolist()
-        
+                'study_hours_per_day', 'sleep_hours', 'mental_stress_level',
+                'class_attendance_percent', 'social_media_hours', 'GPA'
+            ]
+        df_filtrado, medias_cluster, ordem_gpa, mapa_nomes = executar_kmeans(df_filtrado, k_clusters)
+
         cores_cluster_map = [
             ASTRA_COLORS["accent_emerald"],  # Top 1
             ASTRA_COLORS["accent_cyan"],     # Top 2
@@ -836,20 +600,6 @@ if ativar_kmeans:
             ASTRA_COLORS["accent_amber"],    # Top 4
             ASTRA_COLORS["accent_rose"]      # Top 5
         ]
-        
-        rotulos_sugeridos = [
-            "🎓 Perfil 1: Alto Desempenho & Foco",
-            "⚖️ Perfil 2: Rendimento Equilibrado",
-            "⚡ Perfil 3: Tensão & Risco de Burnout",
-            "⚠️ Perfil 4: Desengajamento / Baixa Assiduidade",
-            "🔄 Perfil 5: Hábitos Mistos"
-        ]
-        
-        mapa_nomes = {}
-        for rank, cid in enumerate(ordem_gpa):
-            mapa_nomes[cid] = rotulos_sugeridos[rank] if rank < len(rotulos_sugeridos) else f"Perfil {rank+1}"
-            
-        df_filtrado['perfil_cluster'] = df_filtrado['cluster_id'].map(mapa_nomes)
         
         # Cards com Métricas dos Perfis
         col_k_cards = st.columns(k_clusters)
@@ -874,17 +624,7 @@ if ativar_kmeans:
         
         with col_km1:
             df_cluster_sample = df_filtrado.sample(min(len(df_filtrado), 2500), random_state=42) if len(df_filtrado) > 2500 else df_filtrado
-            fig_km_scatter = px.scatter(
-                df_cluster_sample,
-                x="class_attendance_percent",
-                y="GPA",
-                color="perfil_cluster",
-                color_discrete_sequence=[cores_cluster_map[ordem_gpa.index(cid) % len(cores_cluster_map)] for cid in sorted(df_filtrado['cluster_id'].unique())],
-                labels={"class_attendance_percent": "Frequência às Aulas (%)", "GPA": "GPA Acadêmico (0 a 4.0)", "perfil_cluster": "Perfil K-Means"},
-                hover_data=["study_hours_per_day", "mental_stress_level", "sleep_hours"]
-            )
-            fig_km_scatter.update_traces(marker=dict(size=6, opacity=0.75))
-            estilizar_grafico(fig_km_scatter, "Dispersão dos Perfis: Frequência vs. GPA")
+            fig_km_scatter = criar_grafico_clusters(df_filtrado, cores_cluster_map, ordem_gpa)
             st.plotly_chart(fig_km_scatter, use_container_width=True)
             
         with col_km2:
@@ -898,16 +638,7 @@ if ativar_kmeans:
             df_plot_melt = df_plot_bars.melt(id_vars=['perfil_cluster'], var_name='Hábito', value_name='Média')
             df_plot_melt['Hábito'] = df_plot_melt['Hábito'].map(nomes_labels)
             
-            fig_km_bars = px.bar(
-                df_plot_melt,
-                x="Hábito",
-                y="Média",
-                color="perfil_cluster",
-                barmode="group",
-                color_discrete_sequence=CATEGORICAL_PALETTE,
-                labels={"Média": "Média do Hábito", "perfil_cluster": "Perfil"}
-            )
-            estilizar_grafico(fig_km_bars, "Comparativo dos Hábitos Médios entre os Perfis")
+            fig_km_bars = criar_grafico_perfil_clusters(df_plot_melt)
             st.plotly_chart(fig_km_bars, use_container_width=True)
         
         # Tabela Resumo dos Perfis K-Means
