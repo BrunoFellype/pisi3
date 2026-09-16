@@ -182,6 +182,12 @@ def carregar_dados():
 # MOTOR PREDITIVO - ASTRA
 # ============================================================
 
+def gpa_para_nota(gpa):
+    """
+    Converte GPA da escala 0–4 para uma escala de 0–10.
+    """
+    return (gpa / 4) * 10
+
 @st.cache_resource
 def treinar_motor_preditivo(df):
     """
@@ -198,22 +204,13 @@ def treinar_motor_preditivo(df):
         "age"
     ]
 
-    features_categoricas = [
-        "part_time_job"
-    ]
-
     # Verifica quais colunas realmente existem
     features_numericas = [
         col for col in features_numericas
         if col in df.columns
     ]
 
-    features_categoricas = [
-        col for col in features_categoricas
-        if col in df.columns
-    ]
-
-    features = features_numericas + features_categoricas
+    features = features_numericas
 
     if "GPA" not in df.columns:
         raise ValueError("A coluna GPA não foi encontrada no dataset.")
@@ -262,22 +259,7 @@ def treinar_motor_preditivo(df):
             ("numericas", pipeline_numerica, features_numericas)
         )
 
-    if features_categoricas:
-        pipeline_categorica = Pipeline([
-            ("imputer", SimpleImputer(strategy="most_frequent")),
-            (
-                "onehot",
-                OneHotEncoder(
-                    handle_unknown="ignore",
-                    sparse_output=False
-                )
-            )
-        ])
-
-        transformers.append(
-            ("categoricas", pipeline_categorica, features_categoricas)
-        )
-
+    
     preprocessor = ColumnTransformer(
         transformers=transformers
     )
@@ -359,7 +341,6 @@ def treinar_motor_preditivo(df):
         "resultados": resultados_df,
         "features": features,
         "features_numericas": features_numericas,
-        "features_categoricas": features_categoricas,
         "X_test": X_test,
         "y_test": y_test
     }
@@ -1132,10 +1113,6 @@ else:
                 step=1
             )
 
-        trabalha = st.selectbox(
-            "Trabalha em meio período?",
-            ["No", "Yes"]
-        )
 
         # ----------------------------------------------------
         # Botão de previsão
@@ -1178,11 +1155,6 @@ else:
                     "age"
                 ] = idade
 
-            if "part_time_job" in motor["features"]:
-                dados_estudante[
-                    "part_time_job"
-                ] = trabalha
-
             entrada = pd.DataFrame(
                 [dados_estudante],
                 columns=motor["features"]
@@ -1197,6 +1169,8 @@ else:
             # Limita ao intervalo esperado do GPA
             gpa_previsto = max(0, min(4, gpa_previsto))
 
+            # Converte para escala de 0 a 10
+            nota_prevista = gpa_para_nota(gpa_previsto)
             # ------------------------------------------------
             # Classificação
             # ------------------------------------------------
@@ -1226,6 +1200,9 @@ else:
                     "GPA estimado",
                     f"{gpa_previsto:.2f}"
                 )
+                st.caption(
+                    f"Equivalente a uma nota de {nota_prevista:.2f} na escala de 0–10."
+                )
 
             with resultado_col2:
 
@@ -1240,13 +1217,14 @@ else:
                 "sobre o desempenho futuro de um estudante."
             )
 
-        # ----------------------------------------------------
+        # ------------------------------------------------
         # Importância das variáveis
-        # ----------------------------------------------------
+        # ------------------------------------------------
 
         st.markdown("### 🧩 Importância das variáveis")
 
         modelo_final = modelo_escolhido.named_steps["modelo"]
+
         preprocessor_final = modelo_escolhido.named_steps[
             "preprocessamento"
         ]
@@ -1260,15 +1238,32 @@ else:
                 .get_feature_names_out()
             )
 
+            nomes_amigaveis = {
+                "numericas__study_hours_per_day": "Horas de estudo por dia",
+                "numericas__sleep_hours": "Horas de sono por noite",
+                "numericas__mental_stress_level": "Nível de estresse",
+                "numericas__class_attendance_percent": "Frequência às aulas",
+                "numericas__social_media_hours": "Horas em redes sociais",
+                "numericas__age": "Idade"
+            }
+
             df_importancia = pd.DataFrame({
-                "Variável": nomes_features,
+                "Variável": [
+                    nomes_amigaveis.get(nome, nome)
+                    for nome in nomes_features
+                ],
                 "Importância": importancias
             })
+
+            # Converte a importância para percentual
+            df_importancia["Importância (%)"] = (
+                df_importancia["Importância"] * 100
+            )
 
             df_importancia = (
                 df_importancia
                 .sort_values(
-                    "Importância",
+                    "Importância (%)",
                     ascending=False
                 )
                 .head(10)
@@ -1276,10 +1271,10 @@ else:
 
             fig_importancia = px.bar(
                 df_importancia,
-                x="Importância",
+                x="Importância (%)",
                 y="Variável",
                 orientation="h",
-                title="Principais fatores utilizados pelo modelo"
+                title="Importância das variáveis no modelo"
             )
 
             fig_importancia.update_layout(
