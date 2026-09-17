@@ -11,8 +11,15 @@ relações e possíveis perfis presentes nos dados.
 > Para conhecer a aplicação mobile, acesse o
 > [ASTRA - Mobile](https://github.com/brunoFellype/dsi).
 
-## Sobre o projeto
+## Tecnologias utilizadas
+<div align=center>
 
+![Python](https://img.shields.io/badge/Python-0077B5?style=for-the-badge)
+![Pandas](https://img.shields.io/badge/Pandas-DC5343?style=for-the-badge)
+![Plotly](https://img.shields.io/badge/Plotly-879284?style=for-the-badge)
+![SCIKitLearn](https://img.shields.io/badge/SCIKITLEARN-DCC343?style=for-the-badge)
+
+</div>
 
 ## 🎯 Objetivos
 
@@ -87,14 +94,6 @@ semelhantes.
 São avaliados modelos de regressão para investigar a possibilidade de
 prever o GPA a partir de características selecionadas dos estudantes.
 
-## Tecnologias utilizadas
-<div align=center>
-    <img width='100' src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/python/python-original-wordmark.svg" />
-    <img width='100' src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/pandas/pandas-plain-wordmark.svg" alt="Pandas"/>
-    <img width='100' src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/plotly/plotly-original.svg" />
-    <img width='100' src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/streamlit/streamlit-original-wordmark.svg" />
-    <img width='100' src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/scikitlearn/scikitlearn-original.svg" />
-</div> 
 
 ## 🚀 Como executar
 ### 1. Clone o repositório
