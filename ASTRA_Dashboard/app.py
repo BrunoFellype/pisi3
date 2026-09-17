@@ -9,7 +9,7 @@ from analysis.predicao import treinar_motor_preditivo
 from data.load import get_Dataset
 from analysis.clusters import executar_kmeans
 from visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
-from visualization.graphs import criar_scatter_com_tendencia, criar_heatmap_correlacao, criar_grafico_genero, criar_grafico_renda, criar_grafico_trabalho, criar_grafico_internet,criar_grafico_study_gpa, criar_grafico_sono_estresse, criar_grafico_gpa_major, criar_grafico_metodos_anotacao, criar_grafico_ia_tools, criar_grafico_cafe_sono, criar_grafico_clusters, criar_grafico_perfil_clusters
+from visualization.graphs import criar_scatter_com_tendencia, criar_heatmap_correlacao, criar_grafico_genero, criar_grafico_renda, criar_grafico_trabalho, criar_grafico_internet,criar_grafico_study_gpa, criar_grafico_sono_estresse, criar_grafico_gpa_major, criar_grafico_metodos_anotacao, criar_grafico_ia_tools, criar_grafico_cafe_sono, criar_grafico_clusters, criar_grafico_perfil_clusters, criar_grafico_presenca_gpa
 
 try:
     from sklearn.cluster import KMeans
@@ -547,6 +547,7 @@ with col_pz4:
     fig_pz_net = criar_grafico_internet(df_filtrado)
     st.plotly_chart(fig_pz_net, use_container_width=True)
 
+
 st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 
 # 12. SEÇÃO: HÁBITOS, METODOLOGIAS & DISTRIBUIÇÃO ACADÊMICA
@@ -589,7 +590,7 @@ with col_g4:
     fig_metodo = criar_grafico_metodos_anotacao(df_filtrado)
     st.plotly_chart(fig_metodo, use_container_width=True)
 
-col_g5, col_g6 = st.columns(2)
+col_g5, col_g6, col_g7 = st.columns(3)
 
 with col_g5:
     st.caption("Ferramentas de Inteligência Artificial mais utilizadas pelos estudantes:")
@@ -601,6 +602,11 @@ with col_g6:
     st.caption("Relação entre Consumo Diário de Café e Horas Médias de Sono:")
     fig_cafe = criar_grafico_cafe_sono(df_filtrado)
     st.plotly_chart(fig_cafe, use_container_width=True)
+
+with col_g7:
+    st.caption("Relação entre a frequência nas aulas e GPA")
+    fig_frq = criar_grafico_presenca_gpa(df_filtrado)
+    st.plotly_chart(fig_frq, use_container_width=True)
 
 st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
 

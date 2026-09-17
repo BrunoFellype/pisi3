@@ -137,6 +137,7 @@ def criar_grafico_sono_estresse(df_sono):
         x="faixa_sono",
         y="mental_stress_level",
         color="faixa_sono",
+        category_orders={'faixa_sono': ["< 5h (Crítico)", "5h-7h (Alerta)", "7h-9h (Adequado)", "> 9h (Alto)"]},
         color_discrete_sequence=[
             ASTRA_COLORS["accent_rose"],
             ASTRA_COLORS["accent_amber"],
@@ -235,3 +236,16 @@ def criar_grafico_perfil_clusters(df):
     )
     estilizar_grafico(fig_km_bars, "Comparativo dos Hábitos Médios entre os Perfis")
     return fig_km_bars
+
+def criar_grafico_presenca_gpa(df):
+    fig = px.scatter(
+        df,
+        x="class_attendance_percent",
+        y="GPA",
+        labels={
+            "class_attendance_percent": "Presença nas Aulas (%)",
+            "GPA": "GPA"
+        })
+
+    estilizar_grafico(fig,"Presença nas Aulas × GPA")
+    return fig
