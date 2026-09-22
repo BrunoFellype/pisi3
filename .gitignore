@@ -28,6 +28,3 @@ venv.bak/
 Thumbs.db
 desktop.ini
 
-# Streamlit secrets and runtime cache
-.streamlit/secrets.toml
-*/.streamlit/secrets.toml

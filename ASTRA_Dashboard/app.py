@@ -1,1038 +1,232 @@
 import os
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
+from functools import lru_cache
 
+from dash import Dash, Input, Output, State, dcc, html, dash_table
+import pandas as pd
+import plotly.express as px
+
+from analysis.clusters import executar_kmeans
 from analysis.predicao import treinar_motor_preditivo
 from data.load import get_Dataset
-from analysis.clusters import executar_kmeans
-from visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
-from visualization.graphs import criar_scatter_com_tendencia, criar_heatmap_correlacao, criar_grafico_genero, criar_grafico_renda, criar_grafico_trabalho, criar_grafico_internet,criar_grafico_study_gpa, criar_grafico_sono_estresse, criar_grafico_gpa_major, criar_grafico_metodos_anotacao, criar_grafico_ia_tools, criar_grafico_cafe_sono, criar_grafico_clusters, criar_grafico_perfil_clusters, criar_grafico_presenca_gpa
+from visualization.graphs import (
+    criar_grafico_cafe_sono, criar_grafico_clusters, criar_grafico_gpa_major,
+    criar_grafico_genero, criar_grafico_ia_tools, criar_grafico_internet,
+    criar_grafico_metodos_anotacao, criar_grafico_perfil_clusters,
+    criar_grafico_presenca_gpa, criar_grafico_renda, criar_grafico_sono_estresse,
+    criar_grafico_study_gpa, criar_grafico_trabalho, criar_heatmap_correlacao,
+    criar_scatter_com_tendencia,
+)
+from visualization.style import ASTRA_COLORS, estilizar_grafico
 
 try:
-    from sklearn.cluster import KMeans
-    from sklearn.preprocessing import StandardScaler
+    import sklearn
     SKLEARN_DISPONIVEL = True
 except ImportError:
     SKLEARN_DISPONIVEL = False
 
-# 1. Configuração da Página
-st.set_page_config(
-    page_title="ASTRA - Inteligência Acadêmica",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+app = Dash(__name__, title="ASTRA - Inteligência Acadêmica", suppress_callback_exceptions=True)
+server = app.server
+df_raw = get_Dataset()
 
-# 2. Função para treinar o motor preditivo com cache
-@st.cache_resource
-def obter_motor_preditivo(df):
-    return treinar_motor_preditivo(df)
+CSS = {"backgroundColor": ASTRA_COLORS["bg_dark"], "color": ASTRA_COLORS["text_primary"], "fontFamily": "Plus Jakarta Sans, sans-serif", "minHeight": "100vh", "padding": "24px 32px"}
+SIDEBAR = {"backgroundColor": "#0F172A", "borderRight": "1px solid #1E293B", "padding": "20px", "width": "285px", "flexShrink": 0}
+CONTENT = {"flex": 1, "padding": "0 0 0 26px", "minWidth": 0}
+CARD = {"background": "linear-gradient(135deg, #1E293B 0%, #0F172A 100%)", "border": "1px solid #334155", "borderTop": "3px solid #38BDF8", "borderRadius": "12px", "padding": "16px 20px"}
+GRID_2 = {"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))", "gap": "16px"}
+GRID_3 = {"display": "grid", "gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "gap": "16px"}
+GRID_4 = {"display": "grid", "gridTemplateColumns": "repeat(4, minmax(0, 1fr))", "gap": "12px"}
 
-# 3. Estilização CSS Moderna
-st.markdown("""
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        
-        * {
-            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
-        
-        .stApp {
-            background-color: #0B1120;
-            color: #F8FAFC;
-        }
-        
-        h1, h2, h3, h4 {
-            color: #F8FAFC !important;
-            font-weight: 700 !important;
-            letter-spacing: -0.02em;
-        }
-        
-        p, span, label {
-            color: #CBD5E1;
-        }
-        
-        section[data-testid="stSidebar"] {
-            background-color: #0F172A !important;
-            border-right: 1px solid #1E293B;
-        }
-        section[data-testid="stSidebar"] h1,
-        section[data-testid="stSidebar"] h2,
-        section[data-testid="stSidebar"] h3 {
-            color: #38BDF8 !important;
-        }
-        
-        /* Cards de Métricas (KPIs) */
-        div[data-testid="metric-container"] {
-            background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-            border: 1px solid #334155;
-            border-top: 3px solid #38BDF8;
-            border-radius: 12px;
-            padding: 16px 20px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-            transition: all 0.25s ease;
-        }
-        div[data-testid="metric-container"]:hover {
-            transform: translateY(-2px);
-            border-color: #38BDF8;
-            box-shadow: 0 8px 24px rgba(56, 189, 248, 0.15);
-        }
-        div[data-testid="metric-container"] label {
-            color: #94A3B8 !important;
-            font-size: 0.82rem !important;
-            font-weight: 600 !important;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
-            color: #F8FAFC !important;
-            font-size: 1.85rem !important;
-            font-weight: 800 !important;
-        }
-        
-        /* Moldura de Gráficos */
-        .stPlotlyChart {
-            background-color: #1E293B;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 10px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-            margin-bottom: 1rem;
-        }
-    </style>
-""", unsafe_allow_html=True)
 
-# 4. Carregamento dos Dados com Cache
-@st.cache_data
-def carregar_dados():
-    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
-    caminhos = [
-        os.path.join(diretorio_atual, "global_university_students_performance_habits_10000.csv"),
-        os.path.join(diretorio_atual, "..", "Data", "global_university_students_performance_habits_10000.csv"),
-        "global_university_students_performance_habits_10000.csv",
-        os.path.join("Data", "global_university_students_performance_habits_10000.csv"),
-        os.path.join("ASTRA_Dashboard", "global_university_students_performance_habits_10000.csv"),
-    ]
-    for caminho in caminhos:
-        if os.path.exists(caminho):
-            return pd.read_csv(caminho)
-    raise FileNotFoundError("Arquivo de dados CSV não encontrado.")
+def control_label(text):
+    return html.Label(text, style={"color": "#CBD5E1", "fontWeight": "600", "display": "block", "marginBottom": "8px"})
 
-# ============================================================
-# MOTOR PREDITIVO - ASTRA
-# ============================================================
+
+def multi_control(identifier, label, options):
+    return html.Div([control_label(label), dcc.Dropdown(id=identifier, options=[{"label": str(item), "value": item} for item in options], value=options, multi=True, style={"color": "#0F172A"})], style={"marginBottom": "18px"})
+
+
+def metric(label, value, delta=None):
+    children = [html.Div(label, style={"color": "#94A3B8", "fontSize": "0.82rem", "fontWeight": "600", "textTransform": "uppercase"}), html.Div(value, style={"fontSize": "1.85rem", "fontWeight": "800", "marginTop": "5px"})]
+    if delta is not None:
+        children.append(html.Div(delta, style={"color": "#34D399", "fontSize": "0.85rem"}))
+    return html.Div(children, style=CARD)
+
+
+def graph(figure):
+    return dcc.Graph(figure=figure, config={"displayModeBar": False}, style={"backgroundColor": ASTRA_COLORS["card_dark"]})
+
 
 def gpa_para_nota(gpa):
-    """
-    Converte GPA da escala 0–4 para uma escala de 0–10.
-    """
     return (gpa / 4) * 10
 
-# @st.cache_data
-try:
-    df_raw = get_Dataset()
-except Exception as erro:
-    st.error(f"Erro ao carregar o arquivo CSV: {erro}")
-    st.stop()
 
-# 5. Barra Lateral: Filtros Detalhados
-st.sidebar.title("🎯 Filtros ASTRA")
-st.sidebar.caption("Personalize sua análise:")
-
-# Filtro: Quantidade de Dados a Analisar
-total_registros = len(df_raw)
-qtd_analise = st.sidebar.slider(
-    "Volume de Dados Analisado:",
-    min_value=500,
-    max_value=total_registros,
-    value=total_registros,
-    step=500,
-    help="Define quantos registros da base serão considerados na análise."
-)
-
-st.sidebar.markdown("---")
-
-# Filtro: Cursos
-cursos_unicos = sorted(df_raw['major'].dropna().unique())
-cursos_sel = st.sidebar.multiselect(
-    "Cursos (Graduação):",
-    options=cursos_unicos,
-    default=cursos_unicos
-)
-
-# Filtro: Ano Acadêmico
-anos_unicos = sorted(df_raw['university_year'].dropna().unique())
-anos_sel = st.sidebar.multiselect(
-    "Período / Ano Acadêmico:",
-    options=anos_unicos,
-    default=anos_unicos
-)
-
-# Filtro: Gênero
-generos_unicos = sorted(df_raw['gender'].dropna().unique())
-genero_sel = st.sidebar.multiselect(
-    "Gênero:",
-    options=generos_unicos,
-    default=generos_unicos
-)
-
-# Filtro: Faixa Etária
-min_idade = int(df_raw['age'].min())
-max_idade = int(df_raw['age'].max())
-idade_sel = st.sidebar.slider(
-    "Faixa Etária (Idade):",
-    min_value=min_idade,
-    max_value=max_idade,
-    value=(min_idade, max_idade),
-    step=1
-)
-
-# Filtro: Trabalho em Meio Período
-trabalho_sel = st.sidebar.radio(
-    "Trabalho em Meio Período:",
-    options=["Todos", "Sim (Trabalha)", "Não"],
-    index=0
-)
-
-# Filtro: Nível de Estresse (0 a 10)
-estresse_sel = st.sidebar.slider(
-    "Faixa de Estresse Mental (0 a 10):",
-    min_value=0.0,
-    max_value=10.0,
-    value=(0.0, 10.0),
-    step=0.5
-)
-
-# Filtro: Frequência às Aulas (%)
-freq_sel = st.sidebar.slider(
-    "Frequência às Aulas (%):",
-    min_value=0,
-    max_value=100,
-    value=(0, 100),
-    step=5
-)
-
-# Filtro: Nível de Renda Familiar
-rendas_unicas = sorted(df_raw['family_income_level'].dropna().unique())
-renda_sel = st.sidebar.multiselect(
-    "Nível de Renda Familiar:",
-    options=rendas_unicas,
-    default=rendas_unicas
-)
-
-# Filtro: Método de Anotação
-metodos_unicos = sorted(df_raw['note_taking_method'].dropna().unique())
-metodos_sel = st.sidebar.multiselect(
-    "Método de Anotação:",
-    options=metodos_unicos,
-    default=metodos_unicos
-)
-
-# Configurações de Machine Learning (K-Means) na Barra Lateral
-st.sidebar.markdown("---")
-st.sidebar.subheader("🤖 Machine Learning (K-Means)")
-ativar_kmeans = st.sidebar.checkbox(
-    "Ativar Clusterização K-Means",
-    value=True,
-    help="Agrupa os estudantes em perfis de comportamento automaticamente com Scikit-Learn."
-)
-if ativar_kmeans:
-    k_clusters = st.sidebar.slider(
-        "Quantidade de Perfis (K):",
-        min_value=2,
-        max_value=5,
-        value=3,
-        step=1,
-        help="Número de grupos (perfis de alunos) a serem descobertos pelo K-Means."
-    )
-else:
-    k_clusters = 3
-
-# 6. Aplicação da Filtragem e Amostragem
-df_filtrado = df_raw.copy()
-
-if cursos_sel:
-    df_filtrado = df_filtrado[df_filtrado['major'].isin(cursos_sel)]
-
-if anos_sel:
-    df_filtrado = df_filtrado[df_filtrado['university_year'].isin(anos_sel)]
-
-if genero_sel:
-    df_filtrado = df_filtrado[df_filtrado['gender'].isin(genero_sel)]
-
-df_filtrado = df_filtrado[
-    (df_filtrado['age'] >= idade_sel[0]) &
-    (df_filtrado['age'] <= idade_sel[1])
-]
-
-if trabalho_sel == "Sim (Trabalha)":
-    df_filtrado = df_filtrado[df_filtrado['part_time_job'] == 'Yes']
-elif trabalho_sel == "Não":
-    df_filtrado = df_filtrado[df_filtrado['part_time_job'] == 'No']
-
-df_filtrado = df_filtrado[
-    (df_filtrado['mental_stress_level'] >= estresse_sel[0]) &
-    (df_filtrado['mental_stress_level'] <= estresse_sel[1])
-]
-
-df_filtrado = df_filtrado[
-    (df_filtrado['class_attendance_percent'] >= freq_sel[0]) &
-    (df_filtrado['class_attendance_percent'] <= freq_sel[1])
-]
-
-if renda_sel:
-    df_filtrado = df_filtrado[df_filtrado['family_income_level'].isin(renda_sel)]
-
-if metodos_sel:
-    df_filtrado = df_filtrado[df_filtrado['note_taking_method'].isin(metodos_sel)]
-
-# Aplicação do limite de registros configurado pelo usuário
-if len(df_filtrado) > qtd_analise:
-    df_filtrado = df_filtrado.iloc[:qtd_analise]
-
-# 7. Cabeçalho Principal
-st.title("ASTRA Analytics — Painel de Hábitos & Desempenho Acadêmico")
-# SEÇÃO: VISÃO GERAL, OBJETIVOS E HIPÓTESES
-with st.expander("📌 Sobre o Projeto ASTRA, Objetivos e Questões Norteadoras", expanded=False):
-    st.markdown("### 💡 Objetivo Principal")
-    st.write(
-        "Desenvolver uma plataforma analítica e preditiva que centraliza a rotina "
-        "acadêmica universitária, correlacionando hábitos de estudo, sono, bem-estar e "
-        "uso de ferramentas tecnológicas para antecipar o desempenho acadêmico (GPA) "
-        "e mitigar o risco de sobrecarga estudantil."
-    )
-
-    st.markdown("### 🎯 Objetivos Secundários")
-    st.markdown("""
-    * **Investigação Exploratória:** Realizar a limpeza, transformação e análise exploratória de dados multivariados sobre hábitos de 10.000 estudantes universitários via Streamlit.
-    * **Identificação de Fatores Críticos:** Mapear correlações estatísticas entre indicadores comportamentais (horas de estudo, qualidade de sono, estresse, frequência e redes sociais) e o rendimento acadêmico final.
-    * **Modelagem Preditiva:** Estruturar modelos de regressão capazes de estimar a pontuação acadêmica com base em registros diários de baixo atrito.
-    * **Interface de Suporte à Decisão:** Disponibilizar um painel interativo intuitivo que transforme métricas estatísticas em recomendações práticas para a rotina do estudante.
-    """)
-
-    st.markdown("---")
-    st.markdown("### ❓ Perguntas Norteadoras da Pesquisa")
-    
-    st.markdown("**1. De que maneira o equilíbrio entre horas de sono e nível de estresse modula o impacto das horas de estudo no desempenho acadêmico (GPA)?**")
-    st.info(
-        "**Justificativa e Importância:** Na cultura universitária predomina a crença de que quanto mais horas de estudo diárias, "
-        "melhor o rendimento. No entanto, dados empíricos indicam que noites de sono reduzidas e níveis elevados de estresse geram "
-        "saturação cognitiva, diminuindo a retenção de conteúdo. Investigar essa relação permite identificar o 'ponto de retorno decrescente' "
-        "do esforço e validar a tese central do ASTRA: orientar o aluno a dormir melhor e gerenciar o estresse pode produzir um GPA superior "
-        "ao de simplesmente aumentar as horas de estudo sem descanso."
-    )
-
-    st.markdown("**2. Qual é a correlação do uso de ferramentas de Inteligência Artificial no desempenho dos estudantes quando contrastado com o tempo gasto em redes sociais e a frequência às aulas?**")
-    st.info(
-        "**Justificativa e Importância:** A rápida adoção de ferramentas de IA generativa no meio acadêmico cria um cenário ainda pouco mapeado: "
-        "a IA funciona como potencializadora de aprendizado ou como atalho superficial? Ao cruzar o tempo de uso de IA com a presença em sala "
-        "de aula e o tempo em redes sociais, o projeto extrai padrões comportamentais do estudante moderno, permitindo ao ASTRA calibrar se "
-        "o uso da tecnologia está associado a ganho real de produtividade ou a dispersão."
-    )
-
-# SEÇÃO: DICIONÁRIO DE DADOS
-with st.expander("📖 Dicionário de Dados do Dataset", expanded=False):
-    dict_path = os.path.join(os.path.dirname(__file__), "..", "Data", "dicionario_de_dados.md")
-    if os.path.exists(dict_path):
-        with open(dict_path, "r", encoding="utf-8") as f:
-            st.markdown(f.read())
-    else:
-        st.write("Consulte o arquivo Data/dicionario_de_dados.md no repositório.")
-
-st.caption(
-    f"Exibindo dados de **{len(df_filtrado):,}** estudantes analisados "
-    f"(de um total de **{total_registros:,}** disponíveis na base)."
-)
-
-if df_filtrado.empty:
-    st.warning("⚠️ Nenhum registro encontrado para a combinação atual de filtros. Tente flexibilizar os parâmetros na barra lateral.")
-    st.stop()
-
-# 8. Linha de KPIs de Alto Impacto
-col1, col2, col3, col4, col5, col6 = st.columns(6)
-
-with col1:
-    gpa_medio = df_filtrado['GPA'].mean()
-    st.metric("GPA Médio (0 - 4.0)", f"{gpa_medio:.2f}", delta=f"{gpa_medio - 3.0:+.2f} vs Alvo")
-
-with col2:
-    freq_media = df_filtrado['class_attendance_percent'].mean()
-    st.metric("Frequência Média", f"{freq_media:.1f}%")
-
-with col3:
-    estudo_medio = df_filtrado['study_hours_per_day'].mean()
-    st.metric("Estudo Diário", f"{estudo_medio:.1f} h/dia")
-
-with col4:
-    sono_medio = df_filtrado['sleep_hours'].mean()
-    st.metric("Sono Diário", f"{sono_medio:.1f} h/noite")
-
-with col5:
-    estresse_medio = df_filtrado['mental_stress_level'].mean()
-    st.metric("Nível de Estresse", f"{estresse_medio:.1f} / 10")
-
-with col6:
-    uso_ia = (df_filtrado['favorite_AI_tool'].fillna('None') != 'None').mean() * 100
-    st.metric("Adoção de IA", f"{uso_ia:.1f}%")
-
-st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
-
-# 9. SEÇÃO: MATRIZ DE CORRELAÇÕES & DESCOBERTAS CHAVE
-st.subheader("🔬 Mapa de Correlações & Principais Fatores de Performance")
-st.caption("Visão comparativa de como cada hábito influencia diretamente o GPA e o Desempenho no Exame:")
-
-col_hm1, col_hm2 = st.columns([1.3, 1.0])
-
-with col_hm1:
-    cols_corr = [
-        'GPA', 'final_exam_score', 'class_attendance_percent',
-        'study_hours_per_day', 'sleep_hours', 'mental_stress_level',
-        'social_media_hours', 'screen_time_hours', 'gaming_hours', 'AI_tool_usage_hours'
-    ]
-    nomes_amigaveis = {
-        'GPA': 'GPA',
-        'final_exam_score': 'Nota Exame',
-        'class_attendance_percent': 'Frequência %',
-        'study_hours_per_day': 'Estudo (h)',
-        'sleep_hours': 'Sono (h)',
-        'mental_stress_level': 'Estresse',
-        'social_media_hours': 'Redes Sociais',
-        'screen_time_hours': 'Tempo de Tela',
-        'gaming_hours': 'Games (h)',
-        'AI_tool_usage_hours': 'Uso IA (h)'
-    }
-    df_corr_sub = df_filtrado[cols_corr].rename(columns=nomes_amigaveis)
-    corr_matrix = df_corr_sub.corr().round(2)
-    
-    fig_heatmap = criar_heatmap_correlacao(corr_matrix=corr_matrix, titulo="Matriz de Correlação dos Hábitos vs. Performance")
-    st.plotly_chart(fig_heatmap, use_container_width=True)
-
-with col_hm2:
-    st.markdown("""
-        <div style="background:#1E293B; border:1px solid #334155; border-radius:12px; padding:18px 20px; height:100%;">
-            <h4 style="color:#38BDF8 !important; margin-top:0; font-size:1.05rem;">🏆 Os 2 Maiores Impulsionadores do GPA:</h4>
-            <div style="margin-bottom:12px;">
-                <span style="color:#34D399; font-weight:700; font-size:1.1rem;">+0.74</span> • <b>Frequência às Aulas:</b> É o preditor número 1 de sucesso. Alunos assíduos têm notas substancialmente superiores.<br>
-                <span style="color:#34D399; font-weight:700; font-size:1.1rem;">+0.72</span> • <b>Horas de Estudo Diário:</b> Estudo consistente dia a dia gera o segundo maior impacto positivo.
-            </div>
-            <h4 style="color:#F43F5E !important; margin-top:16px; font-size:1.05rem;">⚠️ Os 3 Maiores Detratores do GPA:</h4>
-            <div style="margin-bottom:12px;">
-                <span style="color:#F43F5E; font-weight:700; font-size:1.1rem;">-0.27</span> • <b>Estresse Mental:</b> Alunos sob tensão elevada sofrem queda significativa de rendimento.<br>
-                <span style="color:#F43F5E; font-weight:700; font-size:1.1rem;">-0.23</span> • <b>Redes Sociais:</b> Cada hora adicional reduz o GPA em ritmo contínuo.<br>
-                <span style="color:#FBBF24; font-weight:700; font-size:1.1rem;">-0.18</span> • <b>Tempo de Tela Total:</b> Excesso de telas tem impacto negativo no foco e descanso.
-            </div>
-            <h4 style="color:#818CF8 !important; margin-top:16px; font-size:1.05rem;">🔍 Mitos Desmistificados pelos Dados:</h4>
-            <div style="font-size:0.88rem; color:#CBD5E1;">
-                • <b>Videogames (r = -0.002):</b> Quase nenhum impacto no GPA, ao contrário das Redes Sociais.<br>
-                • <b>Uso de IA (r = +0.032):</b> Tempo de uso de IA não eleva o GPA sozinho sem estudo prévio.
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
-
-# 10. SEÇÃO: GRÁFICOS DE DISPERSÃO COM LINHAS DE TENDÊNCIA (SCATTER PLOTS)
-st.subheader("📈 Investigação Visual de Hábitos Críticos (Scatter Plots)")
-st.caption("Dispersão detalhada de cada aluno com linha de tendência estimada para os fatores essenciais:")
-
-
-# Linha 1 de Scatters (3 colunas)
-col_c1, col_c2, col_c3 = st.columns(3)
-
-with col_c1:
-    fig_freq_gpa = criar_scatter_com_tendencia(
-        df_filtrado,
-        "class_attendance_percent",
-        "GPA",
-        "Frequência às Aulas (%)",
-        "GPA (0.0 a 4.0)",
-        "Frequência às Aulas vs. GPA (r = +0.74)",
-        ASTRA_COLORS["accent_emerald"],
-        "#FFFFFF"
-    )
-    st.plotly_chart(fig_freq_gpa, use_container_width=True)
-
-with col_c2:
-    fig_redes_gpa = criar_scatter_com_tendencia(
-        df_filtrado,
-        "social_media_hours",
-        "GPA",
-        "Horas em Redes Sociais / Dia",
-        "GPA (0.0 a 4.0)",
-        "Redes Sociais vs. GPA (r = -0.23)",
-        ASTRA_COLORS["accent_amber"],
-        "#FFFFFF"
-    )
-    st.plotly_chart(fig_redes_gpa, use_container_width=True)
-
-with col_c3:
-    fig_sono_gpa = criar_scatter_com_tendencia(
-        df_filtrado,
-        "sleep_hours",
-        "GPA",
-        "Horas de Sono por Noite",
-        "GPA (0.0 a 4.0)",
-        "Sono Diário vs. GPA (r = +0.23)",
-        ASTRA_COLORS["accent_cyan"],
-        "#FFFFFF"
-    )
-    st.plotly_chart(fig_sono_gpa, use_container_width=True)
-
-# Linha 2 de Scatters (3 colunas)
-col_c4, col_c5, col_c6 = st.columns(3)
-
-with col_c4:
-    fig_tela_nota = criar_scatter_com_tendencia(
-        df_filtrado,
-        "screen_time_hours",
-        "final_exam_score",
-        "Tempo de Tela Diário (Horas)",
-        "Nota no Exame Final (0 a 100)",
-        "Tempo de Tela vs. Exame Final (r = -0.08)",
-        ASTRA_COLORS["accent_rose"],
-        "#FFFFFF"
-    )
-    st.plotly_chart(fig_tela_nota, use_container_width=True)
-
-with col_c5:
-    fig_ia_gpa = criar_scatter_com_tendencia(
-        df_filtrado,
-        "AI_tool_usage_hours",
-        "GPA",
-        "Horas de Uso de IA / Dia",
-        "GPA (0.0 a 4.0)",
-        "Uso de IA vs. GPA (r = +0.03)",
-        ASTRA_COLORS["accent_indigo"],
-        "#FFFFFF"
-    )
-    st.plotly_chart(fig_ia_gpa, use_container_width=True)
-
-with col_c6:
-    fig_exercicio_estresse = criar_scatter_com_tendencia(
-        df_filtrado,
-        "exercise_hours_per_week",
-        "mental_stress_level",
-        "Exercício Físico (Horas/Semana)",
-        "Nível de Estresse (0 a 10)",
-        "Exercício Físico vs. Estresse (r = -0.15)",
-        ASTRA_COLORS["accent_teal"],
-        "#FFFFFF"
-    )
-    st.plotly_chart(fig_exercicio_estresse, use_container_width=True)
-
-st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
-
-# 11. SEÇÃO: CONTROLE DE VIESES & DISTRIBUIÇÃO DEMOGRÁFICA (GRÁFICOS DE PIZZA / DONUT)
-st.subheader("🥧 Análise Demográfica & Controle de Vieses")
-st.caption("Gráficos de proporção para verificar a representatividade da amostra e evitar conclusões enviesadas:")
-
-col_pz1, col_pz2, col_pz3, col_pz4 = st.columns(4)
-
-with col_pz1:
-    fig_pz_gen = criar_grafico_genero(df_filtrado)
-    st.plotly_chart(fig_pz_gen, use_container_width=True)
-
-with col_pz2:
-    fig_pz_renda = criar_grafico_renda(df_filtrado)
-    st.plotly_chart(fig_pz_renda, use_container_width=True)
-
-with col_pz3:
-    fig_pz_job = criar_grafico_trabalho(df_filtrado)
-    st.plotly_chart(fig_pz_job, use_container_width=True)
-
-with col_pz4:
-    fig_pz_net = criar_grafico_internet(df_filtrado)
-    st.plotly_chart(fig_pz_net, use_container_width=True)
-
-
-st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
-
-# 12. SEÇÃO: HÁBITOS, METODOLOGIAS & DISTRIBUIÇÃO ACADÊMICA
-st.subheader("📊 Hábitos de Estudo, Métodos & Rendimento por Curso")
-
-col_g1, col_g2 = st.columns(2)
-
-with col_g1:
-    st.caption("Relação: Horas de Estudo vs. GPA com dispersão contínua por Nível de Estresse:")
-    df_disp = df_filtrado.copy()
-    df_disp['favorite_AI_tool'] = df_disp['favorite_AI_tool'].fillna('Nenhuma')
-    df_disp_amostra = df_disp.sample(min(len(df_disp), 2500), random_state=42) if len(df_disp) > 2500 else df_disp
-    
-    fig_disp = criar_grafico_study_gpa(df_disp_amostra)
-    st.plotly_chart(fig_disp, use_container_width=True)
-
-with col_g2:
-    st.caption("Distribuição do Nível de Estresse por Faixas de Sono Diário:")
-    df_filtrado['faixa_sono'] = pd.cut(
-        df_filtrado['sleep_hours'],
-        bins=[0, 5, 7, 9, 24],
-        labels=["< 5h (Crítico)", "5h-7h (Alerta)", "7h-9h (Adequado)", "> 9h (Alto)"]
-    )
-    df_sono = df_filtrado.dropna(subset=['faixa_sono'])
-
-    fig_box = criar_grafico_sono_estresse(df_sono)
-    st.plotly_chart(fig_box, use_container_width=True)
-
-col_g3, col_g4 = st.columns(2)
-
-with col_g3:
-    st.caption("Distribuição do GPA Acadêmico entre os diferentes Cursos de Graduação:")
-
-    fig_box_major = criar_grafico_gpa_major(df_filtrado)
-    st.plotly_chart(fig_box_major, use_container_width=True)
-
-with col_g4:
-    st.caption("Eficácia do Método de Anotação no Exame Final:")
-
-    fig_metodo = criar_grafico_metodos_anotacao(df_filtrado)
-    st.plotly_chart(fig_metodo, use_container_width=True)
-
-col_g5, col_g6, col_g7 = st.columns(3)
-
-with col_g5:
-    st.caption("Ferramentas de Inteligência Artificial mais utilizadas pelos estudantes:")
-
-    fig_ia = criar_grafico_ia_tools(df_filtrado)
-    st.plotly_chart(fig_ia, use_container_width=True)
-
-with col_g6:
-    st.caption("Relação entre Consumo Diário de Café e Horas Médias de Sono:")
-    fig_cafe = criar_grafico_cafe_sono(df_filtrado)
-    st.plotly_chart(fig_cafe, use_container_width=True)
-
-with col_g7:
-    st.caption("Relação entre a frequência nas aulas e GPA")
-    fig_frq = criar_grafico_presenca_gpa(df_filtrado)
-    st.plotly_chart(fig_frq, use_container_width=True)
-
-st.markdown("<div style='margin-bottom: 25px;'></div>", unsafe_allow_html=True)
-
-# ============================================================
-# 13. MOTOR PREDITIVO
-# ============================================================
-
-st.markdown("---")
-st.subheader("🔮 Motor Preditivo de Desempenho Acadêmico")
-
-st.caption(
-    "O ASTRA utiliza Machine Learning para estimar o GPA a partir "
-    "de hábitos e características acadêmicas do estudante."
-)
-
-if not SKLEARN_DISPONIVEL:
-
-    st.warning(
-        "⚠️ O pacote scikit-learn não está disponível. "
-        "Execute: pip install scikit-learn"
-    )
-
-else:
-
-    try:
-
-        # ----------------------------------------------------
-        # Treinamento
-        # ----------------------------------------------------
-
-        motor = obter_motor_preditivo(df_raw)
-
-        modelo_escolhido = motor["modelo"]
-        nome_modelo = motor["nome"]
-        resultados_modelos = motor["resultados"]
-
-        # ----------------------------------------------------
-        # Indicadores do motor
-        # ----------------------------------------------------
-
-        col1, col2, col3 = st.columns(3)
-
-        melhor_r2 = resultados_modelos.iloc[0]["R²"]
-        melhor_mae = resultados_modelos.iloc[0]["MAE"]
-        melhor_rmse = resultados_modelos.iloc[0]["RMSE"]
-
-        with col1:
-            st.metric(
-                "Modelo selecionado",
-                nome_modelo
-            )
-
-        with col2:
-            st.metric(
-                "R²",
-                f"{melhor_r2:.3f}"
-            )
-
-        with col3:
-            st.metric(
-                "Erro médio (MAE)",
-                f"{melhor_mae:.3f}"
-            )
-
-        st.markdown("### 📊 Comparação dos modelos")
-
-        tabela_modelos = resultados_modelos.copy()
-
-        tabela_modelos["MAE"] = tabela_modelos["MAE"].round(3)
-        tabela_modelos["RMSE"] = tabela_modelos["RMSE"].round(3)
-        tabela_modelos["R²"] = tabela_modelos["R²"].round(3)
-
-        st.dataframe(
-            tabela_modelos,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        # ----------------------------------------------------
-        # Formulário de previsão
-        # ----------------------------------------------------
-
-        st.markdown("### 🎯 Simular desempenho de um estudante")
-
-        st.caption(
-            "Informe os hábitos do estudante para gerar uma estimativa."
-        )
-
-        col_a, col_b, col_c = st.columns(3)
-
-        with col_a:
-
-            estudo = st.number_input(
-                "Horas de estudo por dia",
-                min_value=0.0,
-                max_value=24.0,
-                value=4.0,
-                step=0.5
-            )
-
-            sono = st.number_input(
-                "Horas de sono por noite",
-                min_value=0.0,
-                max_value=24.0,
-                value=7.0,
-                step=0.5
-            )
-
-        with col_b:
-
-            estresse = st.slider(
-                "Nível de estresse",
-                min_value=0.0,
-                max_value=10.0,
-                value=5.0,
-                step=0.5
-            )
-
-            frequencia = st.slider(
-                "Frequência às aulas (%)",
-                min_value=0.0,
-                max_value=100.0,
-                value=80.0,
-                step=1.0
-            )
-
-        with col_c:
-
-            redes = st.number_input(
-                "Horas de redes sociais por dia",
-                min_value=0.0,
-                max_value=24.0,
-                value=2.0,
-                step=0.5
-            )
-
-            idade = st.number_input(
-                "Idade",
-                min_value=10,
-                max_value=100,
-                value=20,
-                step=1
-            )
-
-
-        # ----------------------------------------------------
-        # Botão de previsão
-        # ----------------------------------------------------
-
-        if st.button(
-            "🔮 Gerar previsão",
-            use_container_width=True
-        ):
-
-            dados_estudante = {}
-
-            if "study_hours_per_day" in motor["features"]:
-                dados_estudante[
-                    "study_hours_per_day"
-                ] = estudo
-
-            if "sleep_hours" in motor["features"]:
-                dados_estudante[
-                    "sleep_hours"
-                ] = sono
-
-            if "mental_stress_level" in motor["features"]:
-                dados_estudante[
-                    "mental_stress_level"
-                ] = estresse
-
-            if "class_attendance_percent" in motor["features"]:
-                dados_estudante[
-                    "class_attendance_percent"
-                ] = frequencia
-
-            if "social_media_hours" in motor["features"]:
-                dados_estudante[
-                    "social_media_hours"
-                ] = redes
-
-            if "age" in motor["features"]:
-                dados_estudante[
-                    "age"
-                ] = idade
-
-            entrada = pd.DataFrame(
-                [dados_estudante],
-                columns=motor["features"]
-            )
-
-            # ------------------------------------------------
-            # Previsão
-            # ------------------------------------------------
-
-            gpa_previsto = modelo_escolhido.predict(entrada)[0]
-
-            # Limita ao intervalo esperado do GPA
-            gpa_previsto = max(0, min(4, gpa_previsto))
-
-            # Converte para escala de 0 a 10
-            nota_prevista = gpa_para_nota(gpa_previsto)
-            # ------------------------------------------------
-            # Classificação
-            # ------------------------------------------------
-
-            if gpa_previsto >= 3.5:
-
-                classificacao = "Alto desempenho"
-                icone = "🟢"
-
-            elif gpa_previsto >= 2.5:
-
-                classificacao = "Desempenho intermediário"
-                icone = "🟡"
-
-            else:
-
-                classificacao = "Atenção ao desempenho"
-                icone = "🔴"
-
-            st.markdown("---")
-
-            resultado_col1, resultado_col2 = st.columns(2)
-
-            with resultado_col1:
-
-                st.metric(
-                    "GPA estimado",
-                    f"{gpa_previsto:.2f}"
-                )
-                st.caption(
-                    f"Equivalente a uma nota de {nota_prevista:.2f} na escala de 0–10."
-                )
-
-            with resultado_col2:
-
-                st.metric(
-                    "Classificação",
-                    f"{icone} {classificacao}"
-                )
-
-            st.info(
-                "Esta é uma estimativa estatística baseada nos padrões "
-                "encontrados no dataset. Ela não representa uma garantia "
-                "sobre o desempenho futuro de um estudante."
-            )
-
-        # ------------------------------------------------
-        # Importância das variáveis
-        # ------------------------------------------------
-
-        st.markdown("### 🧩 Importância das variáveis")
-
-        modelo_final = modelo_escolhido.named_steps["modelo"]
-
-        preprocessor_final = modelo_escolhido.named_steps[
-            "preprocessamento"
-        ]
-
-        if hasattr(modelo_final, "feature_importances_"):
-
-            importancias = modelo_final.feature_importances_
-
-            nomes_features = (
-                preprocessor_final
-                .get_feature_names_out()
-            )
-
-            nomes_amigaveis = {
-                "numericas__study_hours_per_day": "Horas de estudo por dia",
-                "numericas__sleep_hours": "Horas de sono por noite",
-                "numericas__mental_stress_level": "Nível de estresse",
-                "numericas__class_attendance_percent": "Frequência às aulas",
-                "numericas__social_media_hours": "Horas em redes sociais",
-                "numericas__age": "Idade"
-            }
-
-            df_importancia = pd.DataFrame({
-                "Variável": [
-                    nomes_amigaveis.get(nome, nome)
-                    for nome in nomes_features
-                ],
-                "Importância": importancias
-            })
-
-            # Converte a importância para percentual
-            df_importancia["Importância (%)"] = (
-                df_importancia["Importância"] * 100
-            )
-
-            df_importancia = (
-                df_importancia
-                .sort_values(
-                    "Importância (%)",
-                    ascending=False
-                )
-                .head(10)
-            )
-
-            fig_importancia = px.bar(
-                df_importancia,
-                x="Importância (%)",
-                y="Variável",
-                orientation="h",
-                title="Importância das variáveis no modelo"
-            )
-
-            fig_importancia.update_layout(
-                yaxis={"categoryorder": "total ascending"}
-            )
-
-            estilizar_grafico(
-                fig_importancia,
-                "Importância das Variáveis no Modelo"
-            )
-
-            st.plotly_chart(
-                fig_importancia,
-                use_container_width=True
-            )
-
-        else:
-
-            st.info(
-                "A importância das variáveis é exibida para modelos "
-                "baseados em árvores, como Random Forest e Gradient Boosting."
-            )
-
-    except Exception as erro:
-
-        st.error(
-            f"❌ Não foi possível executar o motor preditivo: {erro}"
-        )
-
-# 14. SEÇÃO: CLUSTERIZAÇÃO K-MEANS & PERFIS AUTOMÁTICOS
-if ativar_kmeans:
-    st.markdown("---")
-    st.subheader("🤖 Segmentação Inteligente de Perfis (K-Means Clustering)")
-    
+def filtered_data(qtd_analise, cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos):
+    data = df_raw.copy()
+    if cursos:
+        data = data[data["major"].isin(cursos)]
+    if anos:
+        data = data[data["university_year"].isin(anos)]
+    if generos:
+        data = data[data["gender"].isin(generos)]
+    data = data[(data["age"] >= idade[0]) & (data["age"] <= idade[1])]
+    if trabalho == "Sim (Trabalha)":
+        data = data[data["part_time_job"] == "Yes"]
+    elif trabalho == "Não":
+        data = data[data["part_time_job"] == "No"]
+    data = data[(data["mental_stress_level"] >= estresse[0]) & (data["mental_stress_level"] <= estresse[1])]
+    data = data[(data["class_attendance_percent"] >= frequencia[0]) & (data["class_attendance_percent"] <= frequencia[1])]
+    if rendas:
+        data = data[data["family_income_level"].isin(rendas)]
+    if metodos:
+        data = data[data["note_taking_method"].isin(metodos)]
+    return data.iloc[:qtd_analise]
+
+
+def project_section():
+    return html.Details([
+        html.Summary("📌 Sobre o Projeto ASTRA, Objetivos e Questões Norteadoras", style={"cursor": "pointer", "fontSize": "1.1rem", "fontWeight": "700"}),
+        dcc.Markdown("""
+### 💡 Objetivo Principal
+Desenvolver uma plataforma analítica e preditiva que centraliza a rotina acadêmica universitária, correlacionando hábitos de estudo, sono, bem-estar e uso de ferramentas tecnológicas para antecipar o desempenho acadêmico (GPA) e mitigar o risco de sobrecarga estudantil.
+
+### 🎯 Objetivos Secundários
+* **Investigação Exploratória:** Realizar a limpeza, transformação e análise exploratória de dados multivariados sobre hábitos de 10.000 estudantes universitários.
+* **Identificação de Fatores Críticos:** Mapear correlações estatísticas entre indicadores comportamentais e o rendimento acadêmico final.
+* **Modelagem Preditiva:** Estruturar modelos de regressão capazes de estimar a pontuação acadêmica com base em registros diários.
+* **Interface de Suporte à Decisão:** Disponibilizar um painel interativo intuitivo que transforme métricas estatísticas em recomendações práticas.
+
+### ❓ Perguntas Norteadoras da Pesquisa
+**1. De que maneira o equilíbrio entre horas de sono e nível de estresse modula o impacto das horas de estudo no desempenho acadêmico (GPA)?**
+
+**2. Qual é a correlação do uso de ferramentas de Inteligência Artificial no desempenho dos estudantes quando contrastado com o tempo gasto em redes sociais e a frequência às aulas?**
+""", style={"color": "#CBD5E1", "marginTop": "18px"}),
+    ], style={"marginBottom": "20px"})
+
+
+def dictionary_section():
+    dictionary_path = os.path.join(os.path.dirname(__file__), "..", "Data", "dicionario_de_dados.md")
+    dictionary_text = open(dictionary_path, encoding="utf-8").read() if os.path.exists(dictionary_path) else "Consulte o arquivo Data/dicionario_de_dados.md no repositório."
+    return html.Details([
+        html.Summary("📖 Dicionário de Dados do Dataset", style={"cursor": "pointer", "fontSize": "1.1rem", "fontWeight": "700"}),
+        dcc.Markdown(dictionary_text, style={"color": "#CBD5E1", "marginTop": "18px"}),
+    ], style={"marginBottom": "20px"})
+
+
+def layout_controls():
+    total = len(df_raw)
+    return html.Aside([
+        html.H2("🎯 Filtros ASTRA", style={"color": "#38BDF8"}),
+        html.P("Personalize sua análise:", style={"color": "#94A3B8"}),
+        control_label("Volume de Dados Analisado:"),
+        dcc.Slider(id="qtd-analise", min=500, max=total, value=total, step=500),
+        html.Hr(style={"borderColor": "#1E293B", "margin": "24px 0"}),
+        multi_control("cursos", "Cursos (Graduação):", sorted(df_raw["major"].dropna().unique())),
+        multi_control("anos", "Período / Ano Acadêmico:", sorted(df_raw["university_year"].dropna().unique())),
+        multi_control("generos", "Gênero:", sorted(df_raw["gender"].dropna().unique())),
+        control_label("Faixa Etária (Idade):"),
+        dcc.RangeSlider(id="idade", min=int(df_raw["age"].min()), max=int(df_raw["age"].max()), value=[int(df_raw["age"].min()), int(df_raw["age"].max())], step=1),
+        html.Div(style={"height": "20px"}),
+        control_label("Trabalho em Meio Período:"),
+        dcc.RadioItems(id="trabalho", options=[{"label": x, "value": x} for x in ["Todos", "Sim (Trabalha)", "Não"]], value="Todos", labelStyle={"display": "block", "marginBottom": "6px"}),
+        html.Div(style={"height": "18px"}),
+        control_label("Faixa de Estresse Mental (0 a 10):"),
+        dcc.RangeSlider(id="estresse", min=0, max=10, value=[0, 10], step=0.5),
+        html.Div(style={"height": "20px"}),
+        control_label("Frequência às Aulas (%):"),
+        dcc.RangeSlider(id="frequencia", min=0, max=100, value=[0, 100], step=5),
+        html.Div(style={"height": "20px"}),
+        multi_control("rendas", "Nível de Renda Familiar:", sorted(df_raw["family_income_level"].dropna().unique())),
+        multi_control("metodos", "Método de Anotação:", sorted(df_raw["note_taking_method"].dropna().unique())),
+        html.Hr(style={"borderColor": "#1E293B", "margin": "24px 0"}),
+        html.H3("🤖 Machine Learning (K-Means)", style={"color": "#38BDF8"}),
+        dcc.Checklist(id="ativar-kmeans", options=[{"label": "Ativar Clusterização K-Means", "value": "ativo"}], value=["ativo"]),
+        html.Div(style={"height": "12px"}),
+        control_label("Quantidade de Perfis (K):"),
+        dcc.Slider(id="k-clusters", min=2, max=5, value=3, step=1, marks={i: str(i) for i in range(2, 6)}),
+    ], style=SIDEBAR)
+
+
+app.layout = html.Div([layout_controls(), html.Main([html.H1("ASTRA Analytics — Painel de Hábitos & Desempenho Acadêmico"), project_section(), dictionary_section(), html.Div(id="dashboard-content")], style=CONTENT)], style={**CSS, "display": "flex"})
+
+
+@lru_cache(maxsize=1)
+def obter_motor_preditivo():
+    return treinar_motor_preditivo(df_raw)
+
+
+def prediction_section(n_clicks, estudo, sono, estresse, frequencia, redes, idade):
     if not SKLEARN_DISPONIVEL:
-        st.warning("⚠️ O pacote `scikit-learn` está sendo instalado ou não foi encontrado. Para habilitar esta seção, execute: `pip install scikit-learn`")
-    elif len(df_filtrado) < k_clusters:
-        st.info("ℹ️ Dados insuficientes para o número de clusters selecionado.")
-    else:
-        st.caption(
-            "O algoritmo de **Machine Learning (Scikit-Learn)** analisa simultaneamente hábitos de estudo, sono, estresse, presença, redes sociais e rendimento "
-            f"para agrupar os **{len(df_filtrado):,}** estudantes em **{k_clusters} perfis comportamentais**:"
-        )
-        features_kmeans = [
-                'study_hours_per_day', 'sleep_hours', 'mental_stress_level',
-                'class_attendance_percent', 'social_media_hours', 'GPA'
-            ]
-        df_filtrado, medias_cluster, ordem_gpa, mapa_nomes = executar_kmeans(df_filtrado, k_clusters)
-
-        cores_cluster_map = [
-            ASTRA_COLORS["accent_emerald"],  # Top 1
-            ASTRA_COLORS["accent_cyan"],     # Top 2
-            ASTRA_COLORS["accent_indigo"],   # Top 3
-            ASTRA_COLORS["accent_amber"],    # Top 4
-            ASTRA_COLORS["accent_rose"]      # Top 5
+        return html.Section([html.H2("🔮 Motor Preditivo de Desempenho Acadêmico"), html.P("O pacote scikit-learn não está disponível.", style={"color": "#FBBF24"})])
+    try:
+        motor = obter_motor_preditivo()
+        resultados = motor["resultados"].copy().round(3)
+        children = [html.H2("🔮 Motor Preditivo de Desempenho Acadêmico"), html.P("O ASTRA utiliza Machine Learning para estimar o GPA a partir de hábitos e características acadêmicas.", style={"color": "#CBD5E1"}), html.Div([metric("Modelo selecionado", motor["nome"]), metric("R²", f"{resultados.iloc[0]['R²']:.3f}"), metric("Erro médio (MAE)", f"{resultados.iloc[0]['MAE']:.3f}")], style=GRID_3), html.H3("📊 Comparação dos modelos"), dash_table.DataTable(data=resultados.to_dict("records"), columns=[{"name": col, "id": col} for col in resultados.columns], style_table={"overflowX": "auto"}, style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC", "fontWeight": "bold"}, style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1", "padding": "10px"}), html.H3("🎯 Simular desempenho de um estudante"), html.P("Informe os hábitos do estudante para gerar uma estimativa.", style={"color": "#94A3B8"})]
+        form_fields = [
+            ("previsao-estudo", "Horas de estudo por dia", estudo, 0, 24, 0.5),
+            ("previsao-sono", "Horas de sono por noite", sono, 0, 24, 0.5),
+            ("previsao-estresse", "Nível de estresse", estresse, 0, 10, 0.5),
+            ("previsao-frequencia", "Frequência às aulas (%)", frequencia, 0, 100, 1),
+            ("previsao-redes", "Horas de redes sociais por dia", redes, 0, 24, 0.5),
+            ("previsao-idade", "Idade", idade, 10, 100, 1),
         ]
-        
-        # Cards com Métricas dos Perfis
-        col_k_cards = st.columns(k_clusters)
-        for i, cid in enumerate(ordem_gpa):
-            qtd_c = (df_filtrado['cluster_id'] == cid).sum()
-            pct_c = (qtd_c / len(df_filtrado)) * 100
-            gpa_c = medias_cluster.loc[cid, 'GPA']
-            estresse_c = medias_cluster.loc[cid, 'mental_stress_level']
-            freq_c = medias_cluster.loc[cid, 'class_attendance_percent']
-            with col_k_cards[i]:
-                cor_card = cores_cluster_map[i % len(cores_cluster_map)]
-                st.markdown(f"""
-                    <div style="background:#1E293B; border:1px solid #334155; border-top:3px solid {cor_card}; border-radius:10px; padding:12px 14px; margin-bottom:15px;">
-                        <div style="font-size:0.83rem; font-weight:700; color:#F8FAFC;">{mapa_nomes[cid]}</div>
-                        <div style="font-size:1.45rem; font-weight:800; color:{cor_card}; margin:3px 0;">{qtd_c:,} <span style="font-size:0.82rem; color:#94A3B8;">({pct_c:.1f}%)</span></div>
-                        <div style="font-size:0.77rem; color:#CBD5E1;">GPA: <b>{gpa_c:.2f}</b> • Presença: <b>{freq_c:.0f}%</b> • Estresse: <b>{estresse_c:.1f}</b></div>
-                    </div>
-                """, unsafe_allow_html=True)
-        
-        # Gráficos da Clusterização
-        col_km1, col_km2 = st.columns(2)
-        
-        with col_km1:
-            df_cluster_sample = df_filtrado.sample(min(len(df_filtrado), 2500), random_state=42) if len(df_filtrado) > 2500 else df_filtrado
-            fig_km_scatter = criar_grafico_clusters(df_filtrado, cores_cluster_map, ordem_gpa)
-            st.plotly_chart(fig_km_scatter, use_container_width=True)
-            
-        with col_km2:
-            nomes_labels = {
-                'study_hours_per_day': 'Estudo (h/dia)',
-                'sleep_hours': 'Sono (h/noite)',
-                'mental_stress_level': 'Estresse (0-10)',
-                'social_media_hours': 'Redes Sociais (h)'
-            }
-            df_plot_bars = df_filtrado.groupby('perfil_cluster')[['study_hours_per_day', 'sleep_hours', 'mental_stress_level', 'social_media_hours']].mean().reset_index()
-            df_plot_melt = df_plot_bars.melt(id_vars=['perfil_cluster'], var_name='Hábito', value_name='Média')
-            df_plot_melt['Hábito'] = df_plot_melt['Hábito'].map(nomes_labels)
-            
-            fig_km_bars = criar_grafico_perfil_clusters(df_plot_melt)
-            st.plotly_chart(fig_km_bars, use_container_width=True)
-        
-        # Tabela Resumo dos Perfis K-Means
-        with st.expander("📊 Ver Tabela Comparativa Detalhada dos Perfis K-Means"):
-            df_resumo_tabela = df_filtrado.groupby('perfil_cluster')[features_kmeans + ['final_exam_score']].agg({
-                'GPA': 'mean',
-                'final_exam_score': 'mean',
-                'class_attendance_percent': 'mean',
-                'study_hours_per_day': 'mean',
-                'sleep_hours': 'mean',
-                'mental_stress_level': 'mean',
-                'social_media_hours': 'mean'
-            }).round(2).rename(columns={
-                'GPA': 'GPA Médio',
-                'final_exam_score': 'Nota Exame',
-                'class_attendance_percent': 'Frequência (%)',
-                'study_hours_per_day': 'Estudo (h)',
-                'sleep_hours': 'Sono (h)',
-                'mental_stress_level': 'Estresse (0-10)',
-                'social_media_hours': 'Redes Sociais (h)'
-            })
-            st.dataframe(df_resumo_tabela, use_container_width=True)
+        children.append(html.Div([html.Div([control_label(label), dcc.Input(id=identifier, type="number", min=minimum, max=maximum, step=step, value=value, style={"width": "100%"})]) for identifier, label, value, minimum, maximum, step in form_fields] + [html.Button("🔮 Gerar previsão", id="gerar-previsao", n_clicks=0, style={"padding": "10px 18px", "backgroundColor": "#38BDF8", "border": 0, "borderRadius": "6px", "fontWeight": "700"})], style={"display": "grid", "gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "gap": "16px", "alignItems": "end"}))
+        if n_clicks:
+            values = {"study_hours_per_day": estudo, "sleep_hours": sono, "mental_stress_level": estresse, "class_attendance_percent": frequencia, "social_media_hours": redes, "age": idade}
+            entrada = pd.DataFrame([{feature: values[feature] for feature in motor["features"]}], columns=motor["features"])
+            gpa = max(0, min(4, motor["modelo"].predict(entrada)[0]))
+            classificacao = "Alto desempenho" if gpa >= 3.5 else "Desempenho intermediário" if gpa >= 2.5 else "Atenção ao desempenho"
+            children.append(html.Div([metric("GPA estimado", f"{gpa:.2f}"), html.Div([metric("Classificação", classificacao), html.P(f"Equivalente a uma nota de {gpa_para_nota(gpa):.2f} na escala de 0–10.", style={"color": "#CBD5E1"})])], style={**GRID_2, "marginTop": "18px"}))
+            children.append(html.P("Esta é uma estimativa estatística baseada nos padrões encontrados no dataset. Ela não representa uma garantia sobre o desempenho futuro de um estudante.", style={"color": "#38BDF8"}))
+        modelo = motor["modelo"].named_steps["modelo"]
+        preprocessor = motor["modelo"].named_steps["preprocessamento"]
+        if hasattr(modelo, "feature_importances_"):
+            importancia = pd.DataFrame({"Variável": preprocessor.get_feature_names_out(), "Importância (%)": modelo.feature_importances_ * 100}).sort_values("Importância (%)", ascending=False).head(10)
+            fig = px.bar(importancia, x="Importância (%)", y="Variável", orientation="h", title="Importância das variáveis no modelo")
+            estilizar_grafico(fig, "Importância das Variáveis no Modelo")
+            children.append(graph(fig))
+        return html.Section(children, style={"marginTop": "28px"})
+    except Exception as error:
+        return html.Section([html.H2("🔮 Motor Preditivo de Desempenho Acadêmico"), html.P(f"Não foi possível executar o motor preditivo: {error}", style={"color": "#F43F5E"})])
 
-st.markdown("---")
 
-# 15. Tabela de Amostra dos Dados
-with st.expander(f"🔍 Visualizar Amostra dos Dados Analisados (Primeiras 100 de {len(df_filtrado):,} linhas)"):
-    st.dataframe(df_filtrado.head(100), use_container_width=True)
+@app.callback(
+    Output("dashboard-content", "children"),
+    Input("qtd-analise", "value"), Input("cursos", "value"), Input("anos", "value"), Input("generos", "value"), Input("idade", "value"), Input("trabalho", "value"), Input("estresse", "value"), Input("frequencia", "value"), Input("rendas", "value"), Input("metodos", "value"), Input("ativar-kmeans", "value"), Input("k-clusters", "value"), Input("gerar-previsao", "n_clicks"),
+    State("previsao-estudo", "value"), State("previsao-sono", "value"), State("previsao-estresse", "value"), State("previsao-frequencia", "value"), State("previsao-redes", "value"), State("previsao-idade", "value"),
+)
+def atualizar_dashboard(qtd, cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos, kmeans_ativo, k, n_clicks, estudo, sono, previsao_estresse, previsao_frequencia, redes, previsao_idade):
+    data = filtered_data(qtd, cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos)
+    if data.empty:
+        return html.Div("⚠️ Nenhum registro encontrado para a combinação atual de filtros. Tente flexibilizar os parâmetros na barra lateral.", style={"color": "#FBBF24", "padding": "24px"})
+    gpa = data["GPA"].mean()
+    content = [html.P(f"Exibindo dados de {len(data):,} estudantes analisados (de um total de {len(df_raw):,} disponíveis na base).", style={"color": "#94A3B8"}), html.Div([metric("GPA Médio (0 - 4.0)", f"{gpa:.2f}", f"{gpa - 3.0:+.2f} vs Alvo"), metric("Frequência Média", f"{data['class_attendance_percent'].mean():.1f}%"), metric("Estudo Diário", f"{data['study_hours_per_day'].mean():.1f} h/dia"), metric("Sono Diário", f"{data['sleep_hours'].mean():.1f} h/noite"), metric("Nível de Estresse", f"{data['mental_stress_level'].mean():.1f} / 10"), metric("Adoção de IA", f"{(data['favorite_AI_tool'].fillna('None') != 'None').mean() * 100:.1f}%")], style={"display": "grid", "gridTemplateColumns": "repeat(6, minmax(0, 1fr))", "gap": "12px"})]
+    corr_cols = ["GPA", "final_exam_score", "class_attendance_percent", "study_hours_per_day", "sleep_hours", "mental_stress_level", "social_media_hours", "screen_time_hours", "gaming_hours", "AI_tool_usage_hours"]
+    corr_names = {"GPA": "GPA", "final_exam_score": "Nota Exame", "class_attendance_percent": "Frequência %", "study_hours_per_day": "Estudo (h)", "sleep_hours": "Sono (h)", "mental_stress_level": "Estresse", "social_media_hours": "Redes Sociais", "screen_time_hours": "Tempo de Tela", "gaming_hours": "Games (h)", "AI_tool_usage_hours": "Uso IA (h)"}
+    heatmap = criar_heatmap_correlacao(data[corr_cols].rename(columns=corr_names).corr().round(2), "Matriz de Correlação dos Hábitos vs. Performance")
+    insight = html.Div([html.H4("🏆 Os 2 Maiores Impulsionadores do GPA:", style={"color": "#38BDF8"}), html.P("+0.74 • Frequência às Aulas: É o preditor número 1 de sucesso."), html.P("+0.72 • Horas de Estudo Diário: Estudo consistente gera impacto positivo."), html.H4("⚠️ Os 3 Maiores Detratores do GPA:", style={"color": "#F43F5E"}), html.P("-0.27 • Estresse Mental; -0.23 • Redes Sociais; -0.18 • Tempo de Tela Total."), html.H4("🔍 Mitos Desmistificados pelos Dados:", style={"color": "#818CF8"}), html.P("Videogames têm quase nenhum impacto no GPA. Uso de IA não eleva o GPA sozinho sem estudo prévio.")], style={**CARD, "height": "100%"})
+    content += [html.H2("🔬 Mapa de Correlações & Principais Fatores de Performance"), html.P("Visão comparativa de como cada hábito influencia diretamente o GPA e o Desempenho no Exame:", style={"color": "#94A3B8"}), html.Div([graph(heatmap), insight], style=GRID_2)]
+    scatters = [("class_attendance_percent", "GPA", "Frequência às Aulas (%)", "GPA (0.0 a 4.0)", "Frequência às Aulas vs. GPA (r = +0.74)", "accent_emerald"), ("social_media_hours", "GPA", "Horas em Redes Sociais / Dia", "GPA (0.0 a 4.0)", "Redes Sociais vs. GPA (r = -0.23)", "accent_amber"), ("sleep_hours", "GPA", "Horas de Sono por Noite", "GPA (0.0 a 4.0)", "Sono Diário vs. GPA (r = +0.23)", "accent_cyan"), ("screen_time_hours", "final_exam_score", "Tempo de Tela Diário (Horas)", "Nota no Exame Final (0 a 100)", "Tempo de Tela vs. Exame Final (r = -0.08)", "accent_rose"), ("AI_tool_usage_hours", "GPA", "Horas de Uso de IA / Dia", "GPA (0.0 a 4.0)", "Uso de IA vs. GPA (r = +0.03)", "accent_indigo"), ("exercise_hours_per_week", "mental_stress_level", "Exercício Físico (Horas/Semana)", "Nível de Estresse (0 a 10)", "Exercício Físico vs. Estresse (r = -0.15)", "accent_teal")]
+    content += [html.H2("📈 Investigação Visual de Hábitos Críticos (Scatter Plots)"), html.P("Dispersão detalhada de cada aluno com linha de tendência estimada para os fatores essenciais:", style={"color": "#94A3B8"}), html.Div([graph(criar_scatter_com_tendencia(data, x, y, lx, ly, title, ASTRA_COLORS[color], "#FFFFFF")) for x, y, lx, ly, title, color in scatters], style=GRID_3)]
+    content += [html.H2("🥧 Análise Demográfica & Controle de Vieses"), html.P("Gráficos de proporção para verificar a representatividade da amostra e evitar conclusões enviesadas:", style={"color": "#94A3B8"}), html.Div([graph(fig) for fig in [criar_grafico_genero(data), criar_grafico_renda(data), criar_grafico_trabalho(data), criar_grafico_internet(data)]], style=GRID_4)]
+    display_data = data.copy()
+    display_data["favorite_AI_tool"] = display_data["favorite_AI_tool"].fillna("Nenhuma")
+    display_data["faixa_sono"] = pd.cut(display_data["sleep_hours"], bins=[0, 5, 7, 9, 24], labels=["< 5h (Crítico)", "5h-7h (Alerta)", "7h-9h (Adequado)", "> 9h (Alto)"])
+    content += [html.H2("📊 Hábitos de Estudo, Métodos & Rendimento por Curso"), html.Div([graph(criar_grafico_study_gpa(display_data.sample(min(len(display_data), 2500), random_state=42))), graph(criar_grafico_sono_estresse(display_data.dropna(subset=["faixa_sono"])))], style=GRID_2), html.Div([graph(criar_grafico_gpa_major(data)), graph(criar_grafico_metodos_anotacao(data))], style=GRID_2), html.Div([graph(criar_grafico_ia_tools(data)), graph(criar_grafico_cafe_sono(data)), graph(criar_grafico_presenca_gpa(data))], style=GRID_3)]
+    content.append(prediction_section(n_clicks, estudo or 4, sono or 7, previsao_estresse or 5, previsao_frequencia or 80, redes or 2, previsao_idade or 20))
+    if kmeans_ativo and SKLEARN_DISPONIVEL and len(data) >= k:
+        clustered, means, order, names = executar_kmeans(data.copy(), k)
+        colors = [ASTRA_COLORS[key] for key in ["accent_emerald", "accent_cyan", "accent_indigo", "accent_amber", "accent_rose"]]
+        cards = [html.Div([html.Div(names[cid], style={"fontWeight": "700"}), html.Div(f"{(clustered['cluster_id'] == cid).sum():,} ({(clustered['cluster_id'] == cid).mean() * 100:.1f}%)", style={"color": colors[i], "fontSize": "1.3rem", "fontWeight": "800"}), html.Div(f"GPA: {means.loc[cid, 'GPA']:.2f} • Presença: {means.loc[cid, 'class_attendance_percent']:.0f}% • Estresse: {means.loc[cid, 'mental_stress_level']:.1f}", style={"color": "#CBD5E1", "fontSize": "0.8rem"})], style={**CARD, "borderTopColor": colors[i]}) for i, cid in enumerate(order)]
+        bars = clustered.groupby("perfil_cluster")[["study_hours_per_day", "sleep_hours", "mental_stress_level", "social_media_hours"]].mean().reset_index().melt(id_vars=["perfil_cluster"], var_name="Hábito", value_name="Média").replace({"Hábito": {"study_hours_per_day": "Estudo (h/dia)", "sleep_hours": "Sono (h/noite)", "mental_stress_level": "Estresse (0-10)", "social_media_hours": "Redes Sociais (h)"}})
+        resumo = clustered.groupby("perfil_cluster")[["GPA", "final_exam_score", "class_attendance_percent", "study_hours_per_day", "sleep_hours", "mental_stress_level", "social_media_hours"]].mean().round(2).reset_index()
+        content += [html.H2("🤖 Segmentação Inteligente de Perfis (K-Means Clustering)"), html.P(f"O algoritmo analisa hábitos e rendimento para agrupar os {len(clustered):,} estudantes em {k} perfis comportamentais:", style={"color": "#94A3B8"}), html.Div(cards, style={"display": "grid", "gridTemplateColumns": f"repeat({k}, minmax(0, 1fr))", "gap": "12px"}), html.Div([graph(criar_grafico_clusters(clustered, colors, order)), graph(criar_grafico_perfil_clusters(bars))], style=GRID_2), html.Details([html.Summary("📊 Ver Tabela Comparativa Detalhada dos Perfis K-Means"), dash_table.DataTable(data=resumo.to_dict("records"), columns=[{"name": col, "id": col} for col in resumo.columns], style_table={"overflowX": "auto"}, style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC"}, style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1"})])]
+    elif kmeans_ativo and SKLEARN_DISPONIVEL:
+        content.append(html.P("ℹ️ Dados insuficientes para o número de clusters selecionado.", style={"color": "#38BDF8"}))
+    elif kmeans_ativo:
+        content.append(html.P("⚠️ O pacote scikit-learn não foi encontrado. Instale scikit-learn para habilitar esta seção.", style={"color": "#FBBF24"}))
+    content.append(html.Details([html.Summary(f"🔍 Visualizar Amostra dos Dados Analisados (Primeiras 100 de {len(data):,} linhas)"), dash_table.DataTable(data=data.head(100).to_dict("records"), columns=[{"name": col, "id": col} for col in data.columns], page_size=15, style_table={"overflowX": "auto"}, style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC"}, style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1", "minWidth": "120px"})]))
+    return content
+
+
+if __name__ == "__main__":
+    app.run(debug=False)

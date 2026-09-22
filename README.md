@@ -116,9 +116,9 @@ pip install -r requirements.txt
 
 ### 4. Execute o Dashboard
 ```bash
-streamlit run app.py
+python app.py
 ```
-> Após a execução, o Streamlit disponibilizará o dashboard localmente no navegador.
+> Após a execução, o Dash disponibilizará o dashboard localmente no navegador.
 
 ## Relação com o ASTRA
 A análise de dados constitui uma das etapas do projeto ASTRA e está
