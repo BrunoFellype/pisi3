@@ -1,7 +1,11 @@
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
-from visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
+
+try:
+    from visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
+except ImportError:
+    from ASTRA_Dashboard.visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
 
 def criar_scatter_com_tendencia(df_plot, col_x, col_y, label_x, label_y, titulo, cor_pontos, cor_linha):
     tamanho_amostra = min(len(df_plot), 2500)
@@ -248,4 +252,30 @@ def criar_grafico_presenca_gpa(df):
         })
 
     estilizar_grafico(fig,"Presença nas Aulas × GPA")
+    return fig
+
+
+def criar_grafico_desempenho_por_cluster(df_cluster):
+    if df_cluster is None or df_cluster.empty:
+        return px.bar(title="Desempenho por cluster")
+
+    metric_columns = [coluna for coluna in df_cluster.columns if coluna.endswith('_media')]
+    if not metric_columns:
+        return px.bar(title="Desempenho por cluster")
+
+    df_long = df_cluster[["cluster_id"] + metric_columns].copy()
+    df_long.columns = ["cluster_id" if coluna == "cluster_id" else coluna.replace('_media', '').replace('_', ' ') for coluna in df_long.columns]
+    df_long = df_long.melt(id_vars=["cluster_id"], var_name="Indicador", value_name="Média")
+    df_long["Indicador"] = df_long["Indicador"].str.replace("final exam score", "Nota do Exame Final").str.replace("assignment score", "Nota de Atividades").str.replace("GPA", "GPA")
+
+    fig = px.bar(
+        df_long,
+        x="cluster_id",
+        y="Média",
+        color="Indicador",
+        barmode="group",
+        labels={"cluster_id": "Cluster", "Média": "Média do indicador", "Indicador": "Indicador"},
+        title="Desempenho médio por cluster"
+    )
+    estilizar_grafico(fig, "Desempenho médio por cluster")
     return fig

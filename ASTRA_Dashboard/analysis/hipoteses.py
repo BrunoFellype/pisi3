@@ -8,7 +8,10 @@ except ImportError:
 try:
     from data.load import get_Dataset
 except ImportError:
-    from ..data.load import get_Dataset
+    try:
+        from ASTRA_Dashboard.data.load import get_Dataset
+    except ImportError:
+        from ..data.load import get_Dataset
 
 
 NIVEL_SIGNIFICANCIA = 0.05
@@ -17,10 +20,10 @@ NOTE_TAKING_METHOD_COLUMN = 'note_taking_method'
 MAJOR_COLUMN = 'major'
 
 
-def _resultado_base(agrupamento, grupos=None, tamanhos=None, quantidade=0):
+def _resultado_base(agrupamento, variavel=GPA_COLUMN, grupos=None, tamanhos=None, quantidade=0):
     return {
         'variavel_agrupamento': agrupamento,
-        'variavel_analisada': GPA_COLUMN,
+        'variavel_analisada': variavel,
         'teste_utilizado': None,
         'estatistica': None,
         'p_valor': None,
@@ -40,20 +43,20 @@ def _conclusao(p_valor):
     return 'Não se rejeita a hipótese nula: não foi identificada diferença estatisticamente significativa entre os grupos.'
 
 
-def _dados_para_teste(df, agrupamento):
+def _dados_para_teste(df, agrupamento, variavel=GPA_COLUMN):
     if df is None:
         df = get_Dataset()
 
-    resultado = _resultado_base(agrupamento)
-    colunas_necessarias = [agrupamento, GPA_COLUMN]
+    resultado = _resultado_base(agrupamento, variavel=variavel)
+    colunas_necessarias = [agrupamento, variavel]
     if any(coluna not in df.columns for coluna in colunas_necessarias):
         resultado['conclusao_estatistica'] = 'Dados insuficientes: uma ou mais colunas necessárias não estão disponíveis.'
         return resultado, None
 
     dados = df[colunas_necessarias].copy()
-    dados[GPA_COLUMN] = pd.to_numeric(dados[GPA_COLUMN], errors='coerce')
+    dados[variavel] = pd.to_numeric(dados[variavel], errors='coerce')
     dados = dados.dropna(subset=colunas_necessarias)
-    dados = dados[dados[GPA_COLUMN].apply(lambda valor: pd.notna(valor) and pd.api.types.is_number(valor))]
+    dados = dados[dados[variavel].apply(lambda valor: pd.notna(valor) and pd.api.types.is_number(valor))]
     if dados.empty:
         resultado['conclusao_estatistica'] = 'Dados insuficientes: não há registros válidos para a análise.'
         return resultado, None
@@ -64,7 +67,7 @@ def _dados_para_teste(df, agrupamento):
 
     grupos = list(dados[agrupamento].drop_duplicates())
     amostras = {
-        grupo: dados.loc[dados[agrupamento] == grupo, GPA_COLUMN].tolist()
+        grupo: dados.loc[dados[agrupamento] == grupo, variavel].tolist()
         for grupo in grupos
     }
     tamanhos = {grupo: len(amostra) for grupo, amostra in amostras.items()}
@@ -77,8 +80,8 @@ def _dados_para_teste(df, agrupamento):
     return resultado, amostras
 
 
-def _executar_teste(df, agrupamento):
-    resultado, amostras = _dados_para_teste(df, agrupamento)
+def _executar_teste(df, agrupamento, variavel=GPA_COLUMN):
+    resultado, amostras = _dados_para_teste(df, agrupamento, variavel)
     if amostras is None:
         return resultado
 
@@ -133,6 +136,53 @@ def _executar_teste(df, agrupamento):
         'conclusao_estatistica': _conclusao(float(teste.pvalue))
     })
     return resultado
+
+
+def comparar_desempenho_por_cluster(df=None, cluster_labels=None, cluster_coluna='cluster_id', variaveis_desempenho=None):
+    if df is None:
+        df = get_Dataset()
+
+    dados = df.copy()
+    if cluster_labels is not None:
+        if len(cluster_labels) != len(dados):
+            raise ValueError('O número de rótulos de cluster deve coincidir com o número de linhas do DataFrame.')
+        dados[cluster_coluna] = list(cluster_labels)
+
+    if cluster_coluna not in dados.columns:
+        raise ValueError(f'A coluna de cluster {cluster_coluna} não foi encontrada no DataFrame.')
+
+    variaveis = ['GPA', 'final_exam_score', 'assignment_score'] if variaveis_desempenho is None else list(variaveis_desempenho)
+    variaveis = [variavel for variavel in variaveis if variavel in dados.columns]
+    if not variaveis:
+        return {'tabela': pd.DataFrame(columns=[cluster_coluna, 'n']), 'teste_por_variavel': {}}
+
+    tabela = dados.groupby(cluster_coluna, dropna=False).agg(
+        n=(cluster_coluna, 'size'),
+        **{f'{variavel}_media': (variavel, 'mean') for variavel in variaveis},
+        **{f'{variavel}_mediana': (variavel, 'median') for variavel in variaveis}
+    ).reset_index()
+
+    testes = {}
+    for variavel in variaveis:
+        teste = _executar_teste(dados, cluster_coluna, variavel=variavel)
+        testes[variavel] = {
+            'teste_utilizado': teste.get('teste_utilizado'),
+            'estatistica': teste.get('estatistica'),
+            'p_valor': teste.get('p_valor'),
+            'conclusao_estatistica': teste.get('conclusao_estatistica')
+        }
+        tabela[f'{variavel}_teste'] = teste.get('teste_utilizado')
+        tabela[f'{variavel}_estatistica'] = teste.get('estatistica')
+        tabela[f'{variavel}_p_valor'] = teste.get('p_valor')
+        tabela[f'{variavel}_significativo'] = None if teste.get('p_valor') is None else teste.get('p_valor') < NIVEL_SIGNIFICANCIA
+
+    tabela = tabela.sort_values(by=[cluster_coluna], kind='mergesort').reset_index(drop=True)
+    return {
+        'tabela': tabela,
+        'teste_por_variavel': testes,
+        'variaveis_analisadas': variaveis,
+        'cluster_coluna': cluster_coluna
+    }
 
 
 def testar_metodo_anotacao_gpa(df=None):

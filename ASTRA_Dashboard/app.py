@@ -1,17 +1,24 @@
 import os
+import sys
 from functools import lru_cache
+from pathlib import Path
+
+DASHBOARD_ROOT = Path(__file__).resolve().parent
+if str(DASHBOARD_ROOT) not in sys.path:
+    sys.path.insert(0, str(DASHBOARD_ROOT))
 
 from dash import Dash, Input, Output, State, dcc, html, dash_table
 import pandas as pd
 import plotly.express as px
 
 from analysis.clusters import executar_kmeans
+from analysis.hipoteses import comparar_desempenho_por_cluster
 from analysis.predicao import treinar_motor_preditivo
 from data.load import get_Dataset
 from visualization.graphs import (
-    criar_grafico_cafe_sono, criar_grafico_clusters, criar_grafico_gpa_major,
-    criar_grafico_genero, criar_grafico_ia_tools, criar_grafico_internet,
-    criar_grafico_metodos_anotacao, criar_grafico_perfil_clusters,
+    criar_grafico_cafe_sono, criar_grafico_clusters, criar_grafico_desempenho_por_cluster,
+    criar_grafico_gpa_major, criar_grafico_genero, criar_grafico_ia_tools,
+    criar_grafico_internet, criar_grafico_metodos_anotacao, criar_grafico_perfil_clusters,
     criar_grafico_presenca_gpa, criar_grafico_renda, criar_grafico_sono_estresse,
     criar_grafico_study_gpa, criar_grafico_trabalho, criar_heatmap_correlacao,
     criar_scatter_com_tendencia,
@@ -80,6 +87,18 @@ def filtered_data(qtd_analise, cursos, anos, generos, idade, trabalho, estresse,
     if metodos:
         data = data[data["note_taking_method"].isin(metodos)]
     return data.iloc[:qtd_analise]
+
+
+def preparar_clusterizacao(data, k):
+    modelo, labels = executar_kmeans(data.copy(), k)
+    clustered = data.copy()
+    clustered["cluster_id"] = labels
+    medias_cluster = clustered.groupby("cluster_id")["GPA"].mean().sort_values()
+    order = list(medias_cluster.index)
+    names = {cluster_id: f"Perfil {i + 1}" for i, cluster_id in enumerate(order)}
+    clustered["perfil_cluster"] = clustered["cluster_id"].map(names)
+    means = clustered.groupby("cluster_id")[["GPA", "final_exam_score", "class_attendance_percent", "study_hours_per_day", "sleep_hours", "mental_stress_level", "social_media_hours"]].mean()
+    return clustered, means, order, names
 
 
 def project_section():
@@ -214,12 +233,20 @@ def atualizar_dashboard(qtd, cursos, anos, generos, idade, trabalho, estresse, f
     content += [html.H2("📊 Hábitos de Estudo, Métodos & Rendimento por Curso"), html.Div([graph(criar_grafico_study_gpa(display_data.sample(min(len(display_data), 2500), random_state=42))), graph(criar_grafico_sono_estresse(display_data.dropna(subset=["faixa_sono"])))], style=GRID_2), html.Div([graph(criar_grafico_gpa_major(data)), graph(criar_grafico_metodos_anotacao(data))], style=GRID_2), html.Div([graph(criar_grafico_ia_tools(data)), graph(criar_grafico_cafe_sono(data)), graph(criar_grafico_presenca_gpa(data))], style=GRID_3)]
     content.append(prediction_section(n_clicks, estudo or 4, sono or 7, previsao_estresse or 5, previsao_frequencia or 80, redes or 2, previsao_idade or 20))
     if kmeans_ativo and SKLEARN_DISPONIVEL and len(data) >= k:
-        clustered, means, order, names = executar_kmeans(data.copy(), k)
+        clustered, means, order, names = preparar_clusterizacao(data.copy(), k)
         colors = [ASTRA_COLORS[key] for key in ["accent_emerald", "accent_cyan", "accent_indigo", "accent_amber", "accent_rose"]]
         cards = [html.Div([html.Div(names[cid], style={"fontWeight": "700"}), html.Div(f"{(clustered['cluster_id'] == cid).sum():,} ({(clustered['cluster_id'] == cid).mean() * 100:.1f}%)", style={"color": colors[i], "fontSize": "1.3rem", "fontWeight": "800"}), html.Div(f"GPA: {means.loc[cid, 'GPA']:.2f} • Presença: {means.loc[cid, 'class_attendance_percent']:.0f}% • Estresse: {means.loc[cid, 'mental_stress_level']:.1f}", style={"color": "#CBD5E1", "fontSize": "0.8rem"})], style={**CARD, "borderTopColor": colors[i]}) for i, cid in enumerate(order)]
         bars = clustered.groupby("perfil_cluster")[["study_hours_per_day", "sleep_hours", "mental_stress_level", "social_media_hours"]].mean().reset_index().melt(id_vars=["perfil_cluster"], var_name="Hábito", value_name="Média").replace({"Hábito": {"study_hours_per_day": "Estudo (h/dia)", "sleep_hours": "Sono (h/noite)", "mental_stress_level": "Estresse (0-10)", "social_media_hours": "Redes Sociais (h)"}})
         resumo = clustered.groupby("perfil_cluster")[["GPA", "final_exam_score", "class_attendance_percent", "study_hours_per_day", "sleep_hours", "mental_stress_level", "social_media_hours"]].mean().round(2).reset_index()
+<<<<<<< Updated upstream
         content += [html.H2("🤖 Segmentação Inteligente de Perfis (K-Means Clustering)"), html.P(f"O algoritmo analisa hábitos e rendimento para agrupar os {len(clustered):,} estudantes em {k} perfis comportamentais:", style={"color": "#94A3B8"}), html.Div(cards, style={"display": "grid", "gridTemplateColumns": f"repeat({k}, minmax(0, 1fr))", "gap": "12px"}), html.Div([graph(criar_grafico_clusters(clustered, colors, order)), graph(criar_grafico_perfil_clusters(bars))], style=GRID_2), html.Details([html.Summary("📊 Ver Tabela Comparativa Detalhada dos Perfis K-Means"), dash_table.DataTable(data=resumo.to_dict("records"), columns=[{"name": col, "id": col} for col in resumo.columns], style_table={"overflowX": "auto"}, style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC"}, style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1"})])]
+=======
+        analise_cluster = comparar_desempenho_por_cluster(clustered, cluster_labels=clustered["cluster_id"].tolist(), cluster_coluna="cluster_id", variaveis_desempenho=["GPA", "final_exam_score", "assignment_score"])
+        tabela_cluster = analise_cluster["tabela"]
+        fig_cluster_desempenho = criar_grafico_desempenho_por_cluster(tabela_cluster)
+
+        content += [html.H2("🤖 Segmentação Inteligente de Perfis (K-Means Clustering)"), html.P(f"O algoritmo analisa hábitos e rendimento para agrupar os {len(clustered):,} estudantes em {k} perfis comportamentais:", style={"color": "#94A3B8"}), html.Div(cards, style={"display": "grid", "gridTemplateColumns": f"repeat({k}, minmax(0, 1fr))", "gap": "12px"}), html.Div([graph(criar_grafico_clusters(clustered, colors, order)), graph(criar_grafico_perfil_clusters(bars))], style=GRID_2), html.Div([graph(fig_cluster_desempenho)], style={"marginTop": "18px"}), html.Details([html.Summary("📊 Ver Tabela Comparativa Detalhada dos Perfis K-Means"), dash_table.DataTable(data=resumo.to_dict("records"), columns=[{"name": col, "id": col} for col in resumo.columns], style_table={"overflowX": "auto"}, style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC"}, style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1"})]), html.Details([html.Summary("📈 Ver análise estatística do desempenho por cluster"), dash_table.DataTable(data=tabela_cluster.to_dict("records"), columns=[{"name": col, "id": col} for col in tabela_cluster.columns], style_table={"overflowX": "auto"}, style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC"}, style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1"})])]
+>>>>>>> Stashed changes
     elif kmeans_ativo and SKLEARN_DISPONIVEL:
         content.append(html.P("ℹ️ Dados insuficientes para o número de clusters selecionado.", style={"color": "#38BDF8"}))
     elif kmeans_ativo:
