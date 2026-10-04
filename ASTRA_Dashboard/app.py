@@ -14,7 +14,7 @@ from visualization.graphs import (
     criar_grafico_metodos_anotacao, criar_grafico_perfil_clusters,
     criar_grafico_presenca_gpa, criar_grafico_renda, criar_grafico_sono_estresse,
     criar_grafico_study_gpa, criar_grafico_trabalho, criar_heatmap_correlacao,
-    criar_scatter_com_tendencia,
+    criar_scatter_com_tendencia
 )
 from visualization.style import ASTRA_COLORS, estilizar_grafico
 
@@ -42,6 +42,74 @@ except ImportError:
     SKLEARN_DISPONIVEL = False
 
 app = Dash(__name__, title="ASTRA - Inteligência Acadêmica", suppress_callback_exceptions=True)
+
+# Template HTML base com regras de hover de alto contraste
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            /* 1. Opções da Sidebar (Radio e Checkbox) */
+            #trabalho label,
+            .dash-radioitems label,
+            #ativar-kmeans label,
+            .dash-checklist label {
+                color: #c084fc !important;
+                cursor: pointer;
+                font-size: 13px;
+                transition: all 0.2s ease-in-out !important;
+            }
+
+            /* Efeito Hover nas opções de seleção */
+            #trabalho label:hover,
+            .dash-radioitems label:hover,
+            #ativar-kmeans label:hover,
+            .dash-checklist label:hover {
+                color: #ffffff !important;
+                text-shadow: 0 0 10px #ede4ff, 0 0 20px #c084fc !important;
+            }
+
+            /* 2. Destaque dos números dos sliders ao passar o mouse ou quando ativos */
+            .rc-slider-mark-text:hover,
+            .rc-slider-mark-text-active,
+            div.rc-slider-mark span:hover {
+                color: #ffffff !important;
+                font-weight: 800 !important;
+                text-shadow: 0 0 10px #ffffff !important;
+            }
+
+            /* 3. Trilho e marcador do Slider */
+            .rc-slider-track {
+                background-color: #8b5cf6 !important;
+            }
+
+            .rc-slider-handle {
+                border-color: #c084fc !important;
+                background-color: #201d2a !important;
+            }
+
+            .rc-slider-handle:hover,
+            .rc-slider-handle-dragging.rc-slider-handle-dragging {
+                border-color: #ffffff !important;
+                box-shadow: 0 0 12px #c084fc !important;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
 server = app.server
 df_raw = get_Dataset()
 
@@ -54,16 +122,56 @@ GRID_3 = {"display": "grid", "gridTemplateColumns": "repeat(3, minmax(0, 1fr))",
 GRID_4 = {"display": "grid", "gridTemplateColumns": "repeat(4, minmax(0, 1fr))", "gap": "12px"}
 
 
+# Função auxiliar para garantir a cor lavanda visível diretamente nos números do Slider
+def mark_style(text):
+    return {
+        "label": str(text),
+        "style": {
+            "color": "#c084fc",
+            "fontSize": "11px",
+            "fontWeight": "600"
+        }
+    }
+
+
 def control_label(text):
-    return html.Label(text, style={"color": "#CBD5E1", "fontWeight": "600", "display": "block", "marginBottom": "8px"})
+    return html.Label(text, style={"color": "#ede4ff", "fontWeight": "600", "display": "block", "marginBottom": "8px"})
 
 
 def multi_control(identifier, label, options):
-    return html.Div([control_label(label), dcc.Dropdown(id=identifier, options=[{"label": str(item), "value": item} for item in options], value=options, multi=True, style={"color": "#0F172A"})], style={"marginBottom": "18px"})
+    return html.Div([
+        control_label(label),
+        dcc.Dropdown(
+            id=identifier,
+            options=[{"label": str(item), "value": item} for item in options],
+            value=options,
+            multi=True,
+            style={"color": "#0F172A"}
+        )
+    ], style={"marginBottom": "18px"})
 
 
 def metric(label, value, delta=None):
-    children = [html.Div(label, style={"color": "#94A3B8", "fontSize": "0.82rem", "fontWeight": "600", "textTransform": "uppercase"}), html.Div(value, style={"fontSize": "1.85rem", "fontWeight": "800", "marginTop": "5px"})]
+    children = [
+        html.Div(
+            label,
+            style={
+                "color": "#c084fc",
+                "fontSize": "0.82rem",
+                "fontWeight": "600",
+                "textTransform": "uppercase"
+            }
+        ),
+        html.Div(
+            value,
+            style={
+                "color": "#ede4ff",
+                "fontSize": "1.85rem",
+                "fontWeight": "800",
+                "marginTop": "5px"
+            }
+        )
+    ]
     if delta is not None:
         children.append(html.Div(delta, style={"color": "#34D399", "fontSize": "0.85rem"}))
     return html.Div(children, style=CARD)
@@ -132,34 +240,93 @@ def dictionary_section():
 def layout_controls():
     total = len(df_raw)
     return html.Aside([
-        html.H2("🎯 Filtros ASTRA", style={"color": "#38BDF8"}),
-        html.P("Personalize sua análise:", style={"color": "#94A3B8"}),
+        html.H2("⚡ Filtros ASTRA", style={"color": "#38BDF8"}),
+        html.P("Personalize sua análise:", style={"color": "#c084fc", "fontSize": "13px"}),
+        
         control_label("Volume de Dados Analisado:"),
-        dcc.Slider(id="qtd-analise", min=500, max=total, value=total, step=500),
+        dcc.Slider(
+            id="qtd-analise",
+            min=500,
+            max=total,
+            value=total,
+            step=500,
+            marks={
+                500: mark_style("500"),
+                3000: mark_style("3k"),
+                5500: mark_style("5.5k"),
+                8000: mark_style("8k"),
+                total: mark_style("10k")
+            }
+        ),
         html.Hr(style={"borderColor": "#1E293B", "margin": "24px 0"}),
+        
         multi_control("cursos", "Cursos (Graduação):", sorted(df_raw["major"].dropna().unique())),
-        multi_control("anos", "Período / Ano Acadêmico:", sorted(df_raw["university_year"].dropna().unique())),
-        multi_control("generos", "Gênero:", sorted(df_raw["gender"].dropna().unique())),
+        multi_control("anos", "Período / Ano Académico:", sorted(df_raw["university_year"].dropna().unique())),
+        multi_control("generos", "Género:", sorted(df_raw["gender"].dropna().unique())),
+        
         control_label("Faixa Etária (Idade):"),
-        dcc.RangeSlider(id="idade", min=int(df_raw["age"].min()), max=int(df_raw["age"].max()), value=[int(df_raw["age"].min()), int(df_raw["age"].max())], step=1),
+        dcc.RangeSlider(
+            id="idade",
+            min=int(df_raw["age"].min()),
+            max=int(df_raw["age"].max()),
+            value=[int(df_raw["age"].min()), int(df_raw["age"].max())],
+            step=1,
+            marks={i: mark_style(str(i)) for i in range(18, 30, 2)}
+        ),
         html.Div(style={"height": "20px"}),
+        
         control_label("Trabalho em Meio Período:"),
-        dcc.RadioItems(id="trabalho", options=[{"label": x, "value": x} for x in ["Todos", "Sim (Trabalha)", "Não"]], value="Todos", labelStyle={"display": "block", "marginBottom": "6px"}),
+        dcc.RadioItems(
+            id="trabalho",
+            options=[{"label": x, "value": x} for x in ["Todos", "Sim (Trabalha)", "Não"]],
+            value="Todos",
+            labelStyle={"display": "block", "marginBottom": "6px", "cursor": "pointer"}
+        ),
         html.Div(style={"height": "18px"}),
+        
         control_label("Faixa de Estresse Mental (0 a 10):"),
-        dcc.RangeSlider(id="estresse", min=0, max=10, value=[0, 10], step=0.5),
+        dcc.RangeSlider(
+            id="estresse",
+            min=0,
+            max=10,
+            value=[0, 10],
+            step=0.5,
+            marks={i: mark_style(str(i)) for i in range(0, 11, 2)}
+        ),
         html.Div(style={"height": "20px"}),
+        
         control_label("Frequência às Aulas (%):"),
-        dcc.RangeSlider(id="frequencia", min=0, max=100, value=[0, 100], step=5),
+        dcc.RangeSlider(
+            id="frequencia",
+            min=0,
+            max=100,
+            value=[0, 100],
+            step=5,
+            marks={i: mark_style(f"{i}%") for i in range(0, 101, 25)}
+        ),
         html.Div(style={"height": "20px"}),
+        
         multi_control("rendas", "Nível de Renda Familiar:", sorted(df_raw["family_income_level"].dropna().unique())),
         multi_control("metodos", "Método de Anotação:", sorted(df_raw["note_taking_method"].dropna().unique())),
         html.Hr(style={"borderColor": "#1E293B", "margin": "24px 0"}),
+        
         html.H3("🤖 Machine Learning (K-Means)", style={"color": "#38BDF8"}),
-        dcc.Checklist(id="ativar-kmeans", options=[{"label": "Ativar Clusterização K-Means", "value": "ativo"}], value=["ativo"]),
+        dcc.Checklist(
+            id="ativar-kmeans",
+            options=[{"label": " Ativar Clusterização K-Means", "value": "ativo"}],
+            value=["ativo"],
+            labelStyle={"cursor": "pointer"}
+        ),
         html.Div(style={"height": "12px"}),
         control_label("Quantidade de Perfis (K):"),
-        dcc.Slider(id="k-clusters", min=2, max=5, value=3, step=1, marks={i: str(i) for i in range(2, 6)}),
+        dcc.Slider(
+            id="k-clusters",
+            min=2,
+            max=5,
+            value=3,
+            step=1,
+            marks={i: mark_style(str(i)) for i in range(2, 6)}
+        ),
     ], style=SIDEBAR)
 
 
@@ -168,9 +335,9 @@ app.layout = html.Div([
     html.Main([
         html.Div([
             html.H1("ASTRA Analytics - Painel de Hábitos & Desempenho Académico",
-                    style={"color":"F8FAFC","marginBottom":"4px"}),
+                    style={"color": "#F8FAFC", "marginBottom": "4px"}),
             html.P("Plataforma analítica e preditiva da rotina e rendimento universitário.",
-                   style={"color": "94A3B8","marginBottom":"20px"}),
+                   style={"color": "#c084fc", "marginBottom": "20px"}),
         ]),
         dcc.Tabs(
             id="main-tabs",
@@ -180,11 +347,13 @@ app.layout = html.Div([
                 dcc.Tab(label="🔬 Hábitos & Correlações", value="tab-correlacoes", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
                 dcc.Tab(label="🤖 Perfis & Simulador", value="tab-simulador", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
                 dcc.Tab(label="📖 Metodologia & Dicionário", value="tab-metodologia", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
-            ],style={"marginBottom":"24px"}
+            ],
+            style={"marginBottom": "24px"}
         ),
         html.Div(id="dashboard-content")
     ], style=CONTENT)
-], style={**CSS, "display":"flex"})
+], style={**CSS, "display": "flex"})
+
 
 @lru_cache(maxsize=1)
 def obter_motor_preditivo():
@@ -202,9 +371,9 @@ def layout_simulador_desempenho():
     resultados = motor["resultados"].copy().round(3)
 
     return html.Div([
-        html.H2("⚡ Simulador de Desempenho (What-If Engine)", style={"color": "#38BDF8"}),
+        html.H2("⚡ Simulador de Desempenho (Motor Preditivo)", style={"color": "#38BDF8"}),
         html.P("Simule cenários da rotina de um estudante e estime o impacto no GPA através dos modelos de regressão.",
-               style={"color": "#CBD5E1", "marginBottom": "20px"}),
+               style={"color": "#c084fc", "marginBottom": "20px"}),
         
         html.Div([
             metric("Modelo Ativo", motor["nome"]),
@@ -225,27 +394,69 @@ def layout_simulador_desempenho():
         html.Div([
             html.Div([
                 control_label("Horas de estudo diário:"),
-                dcc.Slider(id="sim-estudo", min=0.0, max=10.0, step=0.5, value=4.0, marks={i: f"{i}h" for i in range(11)})
+                dcc.Slider(
+                    id="sim-estudo",
+                    min=0.0,
+                    max=10.0,
+                    step=0.5,
+                    value=4.0,
+                    marks={i: mark_style(f"{i}h") for i in range(11)}
+                )
             ]),
             html.Div([
                 control_label("Frequência presencial às aulas (%):"),
-                dcc.Slider(id="sim-frequencia", min=50, max=100, step=1, value=85, marks={50: "50%", 75: "75%", 100: "100%"})
+                dcc.Slider(
+                    id="sim-frequencia",
+                    min=50,
+                    max=100,
+                    step=1,
+                    value=85,
+                    marks={50: mark_style("50%"), 75: mark_style("75%"), 100: mark_style("100%")}
+                )
             ]),
             html.Div([
                 control_label("Horas de sono por noite:"),
-                dcc.Slider(id="sim-sono", min=3.0, max=10.0, step=0.5, value=7.0, marks={i: f"{i}h" for i in range(3, 11)})
+                dcc.Slider(
+                    id="sim-sono",
+                    min=3.0,
+                    max=10.0,
+                    step=0.5,
+                    value=7.0,
+                    marks={i: mark_style(f"{i}h") for i in range(3, 11)}
+                )
             ]),
             html.Div([
                 control_label("Nível de stress mental (0 a 10):"),
-                dcc.Slider(id="sim-estresse", min=0, max=10, step=0.5, value=4.0, marks={0: "Baixo", 5: "Médio", 10: "Alto"})
+                dcc.Slider(
+                    id="sim-estresse",
+                    min=0,
+                    max=10,
+                    step=0.5,
+                    value=4.0,
+                    marks={0: mark_style("Baixo"), 5: mark_style("Médio"), 10: mark_style("Alto")}
+                )
             ]),
             html.Div([
                 control_label("Tempo em redes sociais (h/dia):"),
-                dcc.Slider(id="sim-redes", min=0.0, max=8.0, step=0.5, value=2.0, marks={i: f"{i}h" for i in range(9)})
+                dcc.Slider(
+                    id="sim-redes",
+                    min=0.0,
+                    max=8.0,
+                    step=0.5,
+                    value=2.0,
+                    marks={i: mark_style(f"{i}h") for i in range(9)}
+                )
             ]),
             html.Div([
                 control_label("Idade do estudante:"),
-                dcc.Slider(id="sim-idade", min=17, max=35, step=1, value=21, marks={17: "17", 25: "25", 35: "35"})
+                dcc.Slider(
+                    id="sim-idade",
+                    min=17,
+                    max=35,
+                    step=1,
+                    value=21,
+                    marks={17: mark_style("17"), 25: mark_style("25"), 35: mark_style("35")}
+                )
             ]),
         ], style={"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))", "gap": "20px", "marginBottom": "24px"}),
 
@@ -255,6 +466,7 @@ def layout_simulador_desempenho():
 
         html.Div(id="resultado-simulador-container", style={"marginTop": "24px"})
     ])
+
 
 @app.callback(
     Output("resultado-simulador-container", "children"),
@@ -311,7 +523,7 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
             ])
         ], style=GRID_2),
         html.P("Nota: Estimativa puramente estatística treinada sobre a base de 10.000 estudantes universitários.",
-               style={"color": "#64748B", "fontSize": "0.8rem", "marginTop": "12px"})
+               style={"color": "#c084fc", "fontSize": "0.85rem", "marginTop": "12px"})
     ]
 
     try:
@@ -371,7 +583,7 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
 
     kpis_header = [
         html.P(f"Amostra ativa: {len(data):,} estudantes filtrados (de {len(df_raw):,} totais).",
-               style={"color": "#94A3B8", "marginBottom": "14px"}),
+               style={"color": "#c084fc", "marginBottom": "14px"}),
         html.Div([
             metric("GPA Médio (0 - 4.0)", f"{gpa_medio:.2f}", f"{gpa_medio - 3.0:+.2f} vs Alvo"),
             metric("Frequência Média", f"{frequencia_media:.1f}%"),
@@ -387,18 +599,18 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
         heatmap = criar_heatmap_correlacao(matriz_correlacao, "Hábitos vs. Desempenho Académico")
         return html.Div(kpis_header + [
             html.H2("🗺️ Matriz de Correlações & Fatores Críticos", style={"color": "#F8FAFC", "marginTop": "20px"}),
-            html.P("Associação linear entre hábitos discentes e notas académicas.", style={"color": "#94A3B8"}),
+            html.P("Associação linear entre hábitos discentes e notas académicas.", style={"color": "#c084fc"}),
             graph(heatmap)
         ])
 
     if aba_ativa == "tab-geral":
         return html.Div(kpis_header + [
             html.H2("Visão Geral do Corpo Discente", style={"color": "#F8FAFC"}),
-            html.P("Os gráficos de dispersão e distribuição demográfica estão a ser integrados nesta secção.", style={"color": "#94A3B8"})
+            html.P("Os gráficos de dispersão e distribuição demográfica estão a ser integrados nesta secção.", style={"color": "#c084fc"})
         ])
 
     return html.Div("Selecione um separador válido.")
 
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True, port=8050)
