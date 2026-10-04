@@ -1,6 +1,5 @@
 import os
 from functools import lru_cache
-
 from dash import Dash, Input, Output, State, dcc, html, dash_table
 import pandas as pd
 import plotly.express as px
@@ -18,6 +17,23 @@ from visualization.graphs import (
     criar_scatter_com_tendencia,
 )
 from visualization.style import ASTRA_COLORS, estilizar_grafico
+
+TAB_STYLE = {
+    "backgroundColor": "#0F172A",
+    "color": "#94A3B8",
+    "borderBottom": "1px solid #1E293B",
+    "padding": "12px 18px",
+    "fontWeight": "600"
+}
+
+TAB_SELECTED_STYLE = {
+    "backgroundColor": "#1E293B",
+    "color": "#38BDF8",
+    "borderTop": "3px solid #38BDF8",
+    "borderBottom": "1px solid #1E293B",
+    "padding": "12px 18px",
+    "fontWeight": "700"
+}
 
 try:
     import sklearn
@@ -149,28 +165,26 @@ def layout_controls():
 
 app.layout = html.Div([
     layout_controls(),
-
     html.Main([
-        html.H1(
-            "ASTRA Analytics — Painel de Hábitos & Desempenho Acadêmico"
-        ),
-
-        project_section(),
-
-        dictionary_section(),
-
-        html.Div(
-            id="dashboard-content",
+        html.Div([
+            html.H1("ASTRA Analytics - Painel de Hábitos & Desempenho Académico",
+                    style={"color":"F8FAFC","marginBottom":"4px"}),
+            html.P("Plataforma analítica e preditiva da rotina e rendimento universitário.",
+                   style={"color": "94A3B8","marginBottom":"20px"}),
+        ]),
+        dcc.Tabs(
+            id="main-tabs",
+            value="tab-simulador",
             children=[
-                html.P(
-                    "Carregando análise...",
-                    style={"color": "#94A3B8"}
-                )
-            ]
-        )
+                dcc.Tab(label="📊 Visão Geral & KPIs", value="tab-geral", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
+                dcc.Tab(label="🔬 Hábitos & Correlações", value="tab-correlacoes", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
+                dcc.Tab(label="🤖 Perfis & Simulador", value="tab-simulador", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
+                dcc.Tab(label="📖 Metodologia & Dicionário", value="tab-metodologia", style=TAB_STYLE, selected_style=TAB_SELECTED_STYLE),
+            ],style={"marginBottom":"24px"}
+        ),
+        html.Div(id="dashboard-content")
     ], style=CONTENT)
-
-], style={**CSS, "display": "flex"})
+], style={**CSS, "display":"flex"})
 
 @lru_cache(maxsize=1)
 def obter_motor_preditivo():
