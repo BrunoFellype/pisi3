@@ -604,10 +604,93 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
         ])
 
     if aba_ativa == "tab-geral":
-        return html.Div(kpis_header + [
-            html.H2("Visão Geral do Corpo Discente", style={"color": "#F8FAFC"}),
-            html.P("Os gráficos de dispersão e distribuição demográfica estão a ser integrados nesta secção.", style={"color": "#c084fc"})
-        ])
+
+        data["faixa_sono"] = pd.cut(
+            data["sleep_hours"],
+            bins=[0, 5, 7, 9, float("inf")],
+            labels=[
+                "< 5h (Crítico)",
+                "5h-7h (Alerta)",
+                "7h-9h (Adequado)",
+                "> 9h (Alto)"
+            ],
+            right=False
+        )
+
+        return html.Div(
+            kpis_header + [
+
+                html.H2(
+                    "📊 Visão Geral do Corpo Discente",
+                    style={"marginTop": "30px"}
+                ),
+
+                html.P(
+                    "Análise dos principais hábitos e características dos estudantes.",
+                    style={"color": "#94A3B8"}
+                ),
+
+                graph(
+                    criar_scatter_com_tendencia(
+                        data,
+                        "study_hours_per_day",
+                        "GPA",
+                        "Horas de Estudo por Dia",
+                        "GPA",
+                        "Horas de Estudo x GPA",
+                        ASTRA_COLORS["accent_cyan"],
+                        ASTRA_COLORS["accent_rose"]
+                    )
+                ),
+
+                html.Div(
+                    [
+                        graph(criar_grafico_genero(data)),
+                        graph(criar_grafico_renda(data)),
+                    ],
+                    style=GRID_2
+                ),
+
+                html.Div(
+                    [
+                        graph(criar_grafico_trabalho(data)),
+                        graph(criar_grafico_internet(data)),
+                    ],
+                    style=GRID_2
+                ),
+
+                html.Div(
+                    [
+                        graph(criar_grafico_study_gpa(data)),
+                        graph(criar_grafico_presenca_gpa(data)),
+                    ],
+                    style=GRID_2
+                ),
+
+                html.Div(
+                    [
+                        graph(criar_grafico_sono_estresse(data)),
+                        graph(criar_grafico_cafe_sono(data)),
+                    ],
+                    style=GRID_2
+                ),
+
+                html.Div(
+                    [
+                        graph(criar_grafico_gpa_major(data)),
+                        graph(criar_grafico_metodos_anotacao(data)),
+                    ],
+                    style=GRID_2
+                ),
+
+                html.Div(
+                    [
+                        graph(criar_grafico_ia_tools(data)),
+                    ],
+                    style={"marginTop": "20px"}
+                )
+            ]
+        )
 
     return html.Div("Selecione um separador válido.")
 

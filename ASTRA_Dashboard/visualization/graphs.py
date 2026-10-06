@@ -32,9 +32,16 @@ def criar_scatter_com_tendencia(df_plot, col_x, col_y, label_x, label_y, titulo,
             y=y_line,
             mode='lines',
             name=f'Tendência ({slope:+.3f})',
-            line=dict(color=cor_linha, width=2.5, dash='dash')
-        ))
+            line=dict(color=cor_linha, width=2.5, dash='dash'),
+            opacity = 0.5
+        )
+        )
     estilizar_grafico(fig, titulo)
+
+    fig.update_yaxes(
+    range=[0, 4.5],
+    title_text=label_y)
+
     return fig
 
 def criar_heatmap_correlacao(corr_matrix, titulo):
