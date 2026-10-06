@@ -79,4 +79,20 @@ def calcular_correlacoes(df=None, habitos=None, desempenhos=None):
 
 
 def calcular_matriz_correlacoes(df=None, habitos=None, desempenhos=None):
-    return calcular_correlacoes(df, habitos, desempenhos)
+    if df is None:
+        df = get_Dataset()
+
+    habitos = HABIT_VARIABLES if habitos is None else list(habitos)
+    desempenhos = PERFORMANCE_VARIABLES if desempenhos is None else list(desempenhos)
+
+    variaveis = [
+        coluna
+        for coluna in habitos + desempenhos
+        if coluna in df.columns
+    ]
+
+    return (
+        df[variaveis]
+        .apply(pd.to_numeric, errors="coerce")
+        .corr(method="pearson")
+    )
