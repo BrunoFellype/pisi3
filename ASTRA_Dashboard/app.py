@@ -559,14 +559,6 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
     Input("metodos", "value")
 )
 def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos):
-    if aba_ativa == "tab-simulador":
-        return layout_simulador_desempenho()
-
-    if aba_ativa == "tab-metodologia":
-        return html.Div([
-            project_section(),
-            dictionary_section()
-        ])
 
     data = filtered_data(qtd, cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos)
 
@@ -593,6 +585,109 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
             metric("Adoção de IA", f"{adocao_ia:.1f}%"),
         ], style={"display": "grid", "gridTemplateColumns": "repeat(6, minmax(0, 1fr))", "gap": "12px", "marginBottom": "24px"})
     ]
+
+    if aba_ativa == "tab-simulador":
+
+        k = 3
+
+        df_cluster, medias_cluster, ordem_gpa, mapa_nomes = executar_kmeans(
+            data.copy(),
+            k
+        )
+
+        ordem_perfis = [
+            mapa_nomes[cid]
+            for cid in ordem_gpa
+        ]
+
+        cores_perfis = [
+            ASTRA_COLORS["accent_emerald"],
+            ASTRA_COLORS["accent_amber"],
+            ASTRA_COLORS["accent_rose"],
+            ASTRA_COLORS["accent_cyan"],
+            ASTRA_COLORS["accent_indigo"]
+        ]
+
+        mapa_cores_perfis = dict(zip(ordem_perfis, cores_perfis))
+
+        grafico_clusters = criar_grafico_clusters(
+            df_cluster,
+            ordem_perfis,
+            mapa_cores_perfis
+        )
+
+        # Preparação dos dados para o gráfico de perfil dos clusters
+        dados_perfil = []
+
+        colunas_habitos = {
+            "study_hours_per_day": "Horas de Estudo",
+            "sleep_hours": "Horas de Sono",
+            "mental_stress_level": "Nível de Estresse",
+            "class_attendance_percent": "Frequência",
+            "GPA": "GPA"
+        }
+
+        for cluster_id in sorted(df_cluster["cluster_id"].unique()):
+
+            perfil = df_cluster[
+                df_cluster["cluster_id"] == cluster_id
+            ]["perfil_cluster"].iloc[0]
+
+            for coluna, nome_habito in colunas_habitos.items():
+
+                dados_perfil.append({
+                    "Hábito": nome_habito,
+                    "Média": df_cluster.loc[
+                        df_cluster["cluster_id"] == cluster_id,
+                        coluna
+                    ].mean(),
+                    "perfil_cluster": perfil,
+                    "cluster_id": cluster_id
+                })
+
+        df_perfil = pd.DataFrame(dados_perfil)
+
+        # Gráfico comparativo dos perfis
+        grafico_perfil = criar_grafico_perfil_clusters(
+            df_perfil, ordem_perfis, mapa_cores_perfis
+        )
+
+        return html.Div(
+            kpis_header + [
+
+                html.H2(
+                    "🤖 Perfis de Estudantes — K-Means",
+                    style={"marginTop": "30px"}
+                ),
+
+                html.P(
+                    "Segmentação dos estudantes de acordo com seus hábitos e desempenho acadêmico.",
+                    style={"color": "#94A3B8"}
+                ),
+
+                html.Div(
+                    [
+                        graph(grafico_clusters),
+                        graph(grafico_perfil)
+                    ],
+                    style=GRID_2
+                ),
+                html.Hr(
+                    style={
+                        "borderColor": "#334155",
+                        "margin": "40px 0"
+                    }
+                ),
+
+                layout_simulador_desempenho()
+            ]
+        )
+
+    if aba_ativa == "tab-metodologia":
+        return html.Div([
+            project_section(),
+            dictionary_section()
+        ])
 
     if aba_ativa == "tab-correlacoes":
         matriz_correlacao = calcular_matriz_correlacoes(df=data)

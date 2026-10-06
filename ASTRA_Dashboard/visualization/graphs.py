@@ -217,28 +217,66 @@ def criar_grafico_cafe_sono(df):
     fig_cafe.update_layout(coloraxis_showscale=False)
     return fig_cafe
 
-def criar_grafico_clusters(df_cluster, cores_cluster_map, ordem_gpa):
+def criar_grafico_clusters(df_cluster, ordem_perfis, mapa_cores_perfis):
+
     fig_km_scatter = px.scatter(
         df_cluster,
         x="class_attendance_percent",
         y="GPA",
         color="perfil_cluster",
-        color_discrete_sequence=[cores_cluster_map[ordem_gpa.index(cid) % len(cores_cluster_map)] for cid in sorted(df_cluster['cluster_id'].unique())],
-        labels={"class_attendance_percent": "Frequência às Aulas (%)", "GPA": "GPA Acadêmico (0 a 4.0)", "perfil_cluster": "Perfil K-Means"},
-        hover_data=["study_hours_per_day", "mental_stress_level", "sleep_hours"]
+
+        category_orders={
+            "perfil_cluster": ordem_perfis
+        },
+
+        color_discrete_map=mapa_cores_perfis,
+
+        labels={
+            "class_attendance_percent": "Frequência às Aulas (%)",
+            "GPA": "GPA Acadêmico (0 a 4.0)",
+            "perfil_cluster": "Perfil K-Means"
+        },
+
+        hover_data=[
+            "study_hours_per_day",
+            "mental_stress_level",
+            "sleep_hours"
+        ]
     )
-    fig_km_scatter.update_traces(marker=dict(size=6, opacity=0.75))
-    estilizar_grafico(fig_km_scatter, "Dispersão dos Perfis: Frequência vs. GPA")
+
+    fig_km_scatter.update_traces(
+        marker=dict(
+            size=8,
+            opacity=0.8,
+            line=dict(
+                width=0.8,
+                color="#0B1120"
+            )
+        )
+    )
+
+    estilizar_grafico(
+        fig_km_scatter,
+        "Dispersão dos Perfis: Frequência vs. GPA"
+    )
+
+    fig_km_scatter.update_yaxes(
+        range=[0, 4]
+    )
+
     return fig_km_scatter
 
-def criar_grafico_perfil_clusters(df):
+def criar_grafico_perfil_clusters(df, ordem_perfis, cores_cluster_map):
     fig_km_bars = px.bar(
         df,
         x="Hábito",
         y="Média",
         color="perfil_cluster",
+        category_orders={
+            "perfil_cluster": ordem_perfis
+        },
+        color_discrete_map= cores_cluster_map,
         barmode="group",
-        color_discrete_sequence=CATEGORICAL_PALETTE,
         labels={"Média": "Média do Hábito", "perfil_cluster": "Perfil"}
     )
     estilizar_grafico(fig_km_bars, "Comparativo dos Hábitos Médios entre os Perfis")
