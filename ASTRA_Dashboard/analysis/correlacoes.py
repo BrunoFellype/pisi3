@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+from scipy.stats import pearsonr
 
 try:
     from data.load import get_Dataset
@@ -31,42 +33,92 @@ HABIT_RELATIONSHIPS = [
 
 
 def _correlacao_pearson(df, coluna_x, coluna_y):
+    detalhes = _detalhes_correlacao(df, coluna_x, coluna_y)
+    return detalhes['correlacao'], detalhes['pares_validos']
+
+
+def _detalhes_correlacao(df, coluna_x, coluna_y):
     if coluna_x not in df.columns or coluna_y not in df.columns:
-        return None, 0
+        return {
+            'correlacao': None,
+            'valor_p': None,
+            'pares_validos': 0,
+            'sinal': 'indisponível',
+            'intensidade': 'não calculável',
+            'valida': False
+        }
 
     pares = df[[coluna_x, coluna_y]].apply(pd.to_numeric, errors='coerce').dropna()
+    pares = pares.replace([float('inf'), float('-inf')], pd.NA).dropna()
     if len(pares) < 2 or pares[coluna_x].nunique() < 2 or pares[coluna_y].nunique() < 2:
-        return None, len(pares)
+        return {
+            'correlacao': None,
+            'valor_p': None,
+            'pares_validos': len(pares),
+            'sinal': 'indisponível',
+            'intensidade': 'não calculável',
+            'valida': False
+        }
 
-    correlacao = pares[coluna_x].corr(pares[coluna_y], method='pearson')
-    return (None if pd.isna(correlacao) else float(correlacao)), len(pares)
+    resultado = pearsonr(pares[coluna_x], pares[coluna_y])
+    correlacao = float(resultado.statistic)
+    valor_p = float(resultado.pvalue)
+    if not np.isfinite(correlacao) or not np.isfinite(valor_p):
+        return {
+            'correlacao': None,
+            'valor_p': None,
+            'pares_validos': len(pares),
+            'sinal': 'indisponível',
+            'intensidade': 'não calculável',
+            'valida': False
+        }
+
+    return {
+        'correlacao': correlacao,
+        'valor_p': valor_p,
+        'pares_validos': len(pares),
+        'sinal': 'positiva' if correlacao > 0 else 'negativa',
+        'intensidade': _classificar_intensidade(correlacao),
+        'valida': True
+    }
+
+
+def _classificar_intensidade(correlacao):
+    intensidade = abs(correlacao)
+    if intensidade < 0.2:
+        return 'muito fraca'
+    if intensidade < 0.4:
+        return 'fraca'
+    if intensidade < 0.6:
+        return 'moderada'
+    if intensidade < 0.8:
+        return 'forte'
+    return 'muito forte'
 
 
 def calcular_correlacoes(df=None, habitos=None, desempenhos=None):
     if df is None:
         df = get_Dataset()
-    habitos = HABIT_VARIABLES if habitos is None else list(habitos)
-    desempenhos = PERFORMANCE_VARIABLES if desempenhos is None else list(desempenhos)
+    habitos = list(dict.fromkeys(HABIT_VARIABLES if habitos is None else habitos))
+    desempenhos = list(dict.fromkeys(PERFORMANCE_VARIABLES if desempenhos is None else desempenhos))
 
     habit_to_performance = []
     for habito in habitos:
         for desempenho in desempenhos:
-            correlacao, quantidade = _correlacao_pearson(df, habito, desempenho)
+            detalhes = _detalhes_correlacao(df, habito, desempenho)
             habit_to_performance.append({
                 'variavel': habito,
                 'desempenho': desempenho,
-                'correlacao': correlacao,
-                'pares_validos': quantidade
+                **detalhes
             })
 
     habit_to_habit = []
     for variavel_x, variavel_y in HABIT_RELATIONSHIPS:
-        correlacao, quantidade = _correlacao_pearson(df, variavel_x, variavel_y)
+        detalhes = _detalhes_correlacao(df, variavel_x, variavel_y)
         habit_to_habit.append({
             'variavel_x': variavel_x,
             'variavel_y': variavel_y,
-            'correlacao': correlacao,
-            'pares_validos': quantidade
+            **detalhes
         })
 
     return {
@@ -82,8 +134,8 @@ def calcular_matriz_correlacoes(df=None, habitos=None, desempenhos=None):
     if df is None:
         df = get_Dataset()
 
-    habitos = HABIT_VARIABLES if habitos is None else list(habitos)
-    desempenhos = PERFORMANCE_VARIABLES if desempenhos is None else list(desempenhos)
+    habitos = list(dict.fromkeys(HABIT_VARIABLES if habitos is None else habitos))
+    desempenhos = list(dict.fromkeys(PERFORMANCE_VARIABLES if desempenhos is None else desempenhos))
 
     variaveis = [
         coluna
@@ -94,5 +146,6 @@ def calcular_matriz_correlacoes(df=None, habitos=None, desempenhos=None):
     return (
         df[variaveis]
         .apply(pd.to_numeric, errors="coerce")
+        .replace([float("inf"), float("-inf")], float("nan"))
         .corr(method="pearson")
     )
