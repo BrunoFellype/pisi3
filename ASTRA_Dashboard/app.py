@@ -22,7 +22,9 @@ from visualization.graphs import (
     criar_grafico_internet, criar_grafico_metodos_anotacao, criar_grafico_perfil_clusters,
     criar_grafico_presenca_gpa, criar_grafico_renda, criar_grafico_sono_estresse,
     criar_grafico_study_gpa, criar_grafico_estudo_prova, criar_grafico_sono_gpa,
-    criar_grafico_distribuicao_notas,
+    criar_grafico_distribuicao_gpa, criar_grafico_tela_gpa,
+    criar_grafico_atividade_estresse, criar_grafico_distribuicao_notas,
+    criar_grafico_comparacao_modelos,
     criar_grafico_trabalho, criar_heatmap_correlacao,
     criar_scatter_com_tendencia
 )
@@ -106,6 +108,37 @@ app.index_string = '''
             .rc-slider-handle-dragging.rc-slider-handle-dragging {
                 border-color: #ffffff !important;
                 box-shadow: 0 0 12px #c084fc !important;
+            }
+
+            #parametros-simulador .rc-slider-tooltip-inner {
+                background-color: #F8FAFC !important;
+                color: #1F2937 !important;
+                border: 1px solid #CBD5E1 !important;
+                font-weight: 700 !important;
+            }
+
+            #parametros-simulador .rc-slider-tooltip-arrow {
+                border-top-color: #F8FAFC !important;
+            }
+
+            #parametros-simulador input[type="number"] {
+                background-color: #F8FAFC !important;
+                color: #1F2937 !important;
+                border-color: #CBD5E1 !important;
+            }
+
+            #parametros-simulador input[type="number"]:focus,
+            #parametros-simulador input[type="number"]:focus-visible {
+                color: #111827 !important;
+                border-color: #8B5CF6 !important;
+                outline: 2px solid rgba(139, 92, 246, 0.35) !important;
+            }
+
+            #parametros-simulador input[type="number"]:disabled,
+            #parametros-simulador input[type="number"][readonly] {
+                background-color: #E5E7EB !important;
+                color: #374151 !important;
+                opacity: 1 !important;
             }
         </style>
     </head>
@@ -411,6 +444,7 @@ def layout_simulador_desempenho():
             style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC", "fontWeight": "bold"},
             style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1", "padding": "10px", "border": "1px solid #334155"}
         ),
+        graph(criar_grafico_comparacao_modelos(resultados)),
 
         html.H3("Parâmetros da Rotina a Simular", style={"color": "#F8FAFC", "marginBottom": "12px"}),
         html.Div([
@@ -480,7 +514,7 @@ def layout_simulador_desempenho():
                     marks={17: mark_style("17"), 25: mark_style("25"), 35: mark_style("35")}
                 )
             ]),
-        ], style={"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))", "gap": "20px", "marginBottom": "24px"}),
+        ], id="parametros-simulador", style={"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))", "gap": "20px", "marginBottom": "24px"}),
 
         html.Button("Calcular Previsão de Desempenho", id="gerar-previsao", n_clicks=1,
                     style={"padding": "12px 24px", "backgroundColor": "#38BDF8", "color": "#0F172A",
@@ -762,6 +796,10 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
             html.H2("🗺️ Matriz de Correlações & Fatores Críticos", style={"color": "#F8FAFC", "marginTop": "20px"}),
             html.P("A matriz mostra associações lineares (Pearson) entre hábitos e indicadores de desempenho. Associação não implica causalidade.", style={"color": "#c084fc"}),
             graph(heatmap),
+            html.Div([
+                graph(criar_grafico_tela_gpa(data)),
+                graph(criar_grafico_atividade_estresse(data)),
+            ], style=GRID_2),
             html.H3("Correlações com os indicadores de desempenho", style={"color": "#F8FAFC", "marginTop": "20px"}),
             html.P("Spearman é apresentado como diagnóstico de robustez diante do efeito teto. Os valores-p da família hábito-desempenho foram ajustados pelo método Benjamini-Hochberg (FDR).", style={"color": "#94A3B8"}),
             dash_table.DataTable(
@@ -814,6 +852,7 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
                         ASTRA_COLORS["accent_rose"]
                     )
                 ),
+                graph(criar_grafico_distribuicao_gpa(data)),
 
                 html.Div(
                     [

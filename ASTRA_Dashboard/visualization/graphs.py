@@ -2,6 +2,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
+from plotly.subplots import make_subplots
 
 try:
     from visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
@@ -87,6 +88,28 @@ def criar_grafico_genero(df):
     estilizar_grafico(fig_pz_gen, "Distribuição por Gênero")
     fig_pz_gen.update_layout(showlegend=False)
     return fig_pz_gen
+
+def criar_grafico_distribuicao_gpa(df):
+    fig = px.histogram(
+        df,
+        x="GPA",
+        nbins=20,
+        range_x=[0, 4],
+        labels={
+            "GPA": "Desempenho acadêmico (GPA, escala de 0 a 4)",
+            "count": "Quantidade de estudantes"
+        },
+        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"]]
+    )
+    fig.update_traces(
+        hovertemplate=(
+            "Faixa de GPA: %{x}<br>"
+            "Quantidade de estudantes: %{y}<extra></extra>"
+        )
+    )
+    estilizar_grafico(fig, "Distribuição do Desempenho Acadêmico (GPA)")
+    fig.update_layout(bargap=0.08)
+    return fig
 
 def criar_grafico_renda(df):
     df_renda = df['family_income_level'].replace({
@@ -184,6 +207,65 @@ def criar_grafico_estudo_prova(df):
     fig.update_yaxes(range=[0, 105])
     return fig
 
+def _criar_grafico_relacao(df, col_x, col_y, label_x, label_y, titulo, cor, y_range=None):
+    dados = df[[col_x, col_y]].apply(pd.to_numeric, errors="coerce").dropna()
+    fig = px.scatter(
+        dados,
+        x=col_x,
+        y=col_y,
+        labels={col_x: label_x, col_y: label_y},
+        opacity=0.65,
+        color_discrete_sequence=[cor]
+    )
+    fig.update_traces(
+        marker=dict(size=6, line=dict(width=0.5, color="#0B1120")),
+        hovertemplate=(
+            f"{label_x}: %{{x:.2f}}<br>"
+            f"{label_y}: %{{y:.2f}}<extra></extra>"
+        )
+    )
+    if len(dados) > 1 and dados[col_x].nunique() > 1:
+        x_values = dados[col_x].to_numpy(dtype=float)
+        y_values = dados[col_y].to_numpy(dtype=float)
+        slope, intercept = np.polyfit(x_values, y_values, 1)
+        x_line = np.linspace(x_values.min(), x_values.max(), 100)
+        fig.add_trace(go.Scatter(
+            x=x_line,
+            y=slope * x_line + intercept,
+            mode="lines",
+            name="Tendência estatística",
+            line=dict(color=ASTRA_COLORS["accent_amber"], width=2, dash="dash"),
+            hovertemplate="Tendência estatística<extra></extra>"
+        ))
+    estilizar_grafico(fig, titulo)
+    if y_range is not None:
+        fig.update_yaxes(range=y_range)
+    return fig
+
+def criar_grafico_tela_gpa(df):
+    return _criar_grafico_relacao(
+        df,
+        "screen_time_hours",
+        "GPA",
+        "Tempo de tela por dia (horas)",
+        "Desempenho acadêmico (GPA, escala de 0 a 4)",
+        "Relação entre Tempo de Tela e Desempenho Acadêmico",
+        ASTRA_COLORS["accent_violet"],
+        [0, 4]
+    )
+
+def criar_grafico_atividade_estresse(df):
+    return _criar_grafico_relacao(
+        df,
+        "exercise_hours_per_week",
+        "mental_stress_level",
+        "Horas de atividade física por semana",
+        "Nível de estresse (escala de 1 a 10)",
+        "Atividade Física Semanal e Nível de Estresse",
+        ASTRA_COLORS["accent_emerald"],
+        [0, 10]
+    )
+
 def criar_grafico_sono_gpa(df):
     fig = px.scatter(
         df,
@@ -228,6 +310,58 @@ def criar_grafico_distribuicao_notas(df):
     )
     estilizar_grafico(fig, "Distribuição das Notas Acadêmicas")
     fig.update_layout(showlegend=False)
+    return fig
+
+def criar_grafico_comparacao_modelos(resultados):
+    metricas = resultados[["Modelo", "MAE", "RMSE", "R²"]].copy()
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=[
+            "Erros de previsão (menor é melhor)",
+            "Ajuste relativo (maior é melhor)"
+        ],
+        horizontal_spacing=0.14
+    )
+    for metrica, cor in [
+        ("MAE", ASTRA_COLORS["accent_amber"]),
+        ("RMSE", ASTRA_COLORS["accent_rose"])
+    ]:
+        fig.add_trace(
+            go.Bar(
+                x=metricas["Modelo"],
+                y=metricas[metrica],
+                name=metrica,
+                marker_color=cor,
+                hovertemplate=(
+                    "Modelo: %{x}<br>"
+                    f"{metrica}: %{{y:.3f}}<extra></extra>"
+                )
+            ),
+            row=1,
+            col=1
+        )
+    fig.add_trace(
+        go.Bar(
+            x=metricas["Modelo"],
+            y=metricas["R²"],
+            name="R²",
+            marker_color=ASTRA_COLORS["accent_cyan"],
+            hovertemplate="Modelo: %{x}<br>R²: %{y:.3f}<extra></extra>"
+        ),
+        row=1,
+        col=2
+    )
+    fig.update_xaxes(title_text="Modelo preditivo", row=1, col=1)
+    fig.update_xaxes(title_text="Modelo preditivo", row=1, col=2)
+    fig.update_yaxes(title_text="Valor da métrica", row=1, col=1)
+    fig.update_yaxes(title_text="R²", row=1, col=2)
+    fig.update_layout(
+        barmode="group",
+        legend_title_text="Métrica",
+        margin=dict(l=55, r=35, t=80, b=70)
+    )
+    estilizar_grafico(fig, "Comparação de Desempenho dos Modelos Preditivos")
     return fig
 
 def criar_grafico_sono_estresse(df_sono):
