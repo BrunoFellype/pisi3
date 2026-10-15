@@ -21,7 +21,9 @@ from visualization.graphs import (
     criar_grafico_gpa_major, criar_grafico_genero, criar_grafico_ia_tools,
     criar_grafico_internet, criar_grafico_metodos_anotacao, criar_grafico_perfil_clusters,
     criar_grafico_presenca_gpa, criar_grafico_renda, criar_grafico_sono_estresse,
-    criar_grafico_study_gpa, criar_grafico_trabalho, criar_heatmap_correlacao,
+    criar_grafico_study_gpa, criar_grafico_estudo_prova, criar_grafico_sono_gpa,
+    criar_grafico_distribuicao_notas,
+    criar_grafico_trabalho, criar_heatmap_correlacao,
     criar_scatter_com_tendencia
 )
 from visualization.style import ASTRA_COLORS, estilizar_grafico
@@ -517,7 +519,7 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
     gpa = max(0.0, min(4.0, float(motor["modelo"].predict(entrada)[0])))
     
     if sono < 5.5 and estresse >= 6.0:
-        classificacao = "Risco de Burnout Detectado"
+        classificacao = "Indício de sobrecarga acadêmica"
         cor_status = "#F43F5E"
         obs = "Atenção: A combinação de sono reduzido e stress elevado prejudica fortemente o rendimento contínuo."
     elif gpa >= 3.5:
@@ -550,13 +552,28 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
         modelo = motor["modelo"].named_steps["modelo"]
         preprocessor = motor["modelo"].named_steps["preprocessamento"]
         if hasattr(modelo, "feature_importances_"):
+            rotulos_variaveis = {
+                "age": "Idade",
+                "social_media_hours": "Horas diárias em redes sociais",
+                "sleep_hours": "Horas de sono por noite",
+                "mental_stress_level": "Nível de estresse",
+                "study_hours_per_day": "Horas de estudo por dia",
+                "class_attendance_percent": "Frequência às aulas (%)"
+            }
+            nomes_variaveis = [
+                rotulos_variaveis.get(nome.split("__")[-1], nome.split("__")[-1])
+                for nome in preprocessor.get_feature_names_out()
+            ]
             importancia = pd.DataFrame({
-                "Variável": preprocessor.get_feature_names_out(),
+                "Variável": nomes_variaveis,
                 "Importância (%)": modelo.feature_importances_ * 100
             }).sort_values("Importância (%)", ascending=False).head(8)
             fig = px.bar(importancia, x="Importância (%)", y="Variável", orientation="h",
-                         title="Fatores com Maior Peso no Modelo")
-            estilizar_grafico(fig, "Fatores com Maior Peso no Modelo")
+                         labels={
+                             "Importância (%)": "Importância da variável",
+                             "Variável": "Variável"
+                         })
+            estilizar_grafico(fig, "Importância das Variáveis no Modelo Preditivo")
             children.append(graph(fig))
     except Exception:
         pass
@@ -674,7 +691,7 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
             kpis_header + [
 
                 html.H2(
-                    "🤖 Perfis de Estudantes — K-Means",
+                    "Perfis de estudantes — agrupamento K-Means",
                     style={"marginTop": "30px"}
                 ),
 
@@ -724,6 +741,23 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
             "pares_validos": "Pares válidos"
         }).round({"Pearson (r)": 3, "Spearman (rho)": 3, "p-valor": 4,
                   "p-valor ajustado (FDR)": 4})
+        rotulos_correlacao = {
+            "study_hours_per_day": "Horas de estudo por dia",
+            "class_attendance_percent": "Frequência das aulas (%)",
+            "sleep_hours": "Horas de sono por noite",
+            "screen_time_hours": "Tempo de tela por dia (horas)",
+            "social_media_hours": "Tempo em redes sociais por dia (horas)",
+            "mental_stress_level": "Nível de estresse",
+            "GPA": "Desempenho acadêmico (GPA)",
+            "final_exam_score": "Nota da prova final",
+            "assignment_score": "Nota das atividades"
+        }
+        tabela_correlacao["Hábito"] = tabela_correlacao["Hábito"].map(
+            lambda valor: rotulos_correlacao.get(valor, valor)
+        )
+        tabela_correlacao["Desempenho"] = tabela_correlacao["Desempenho"].map(
+            lambda valor: rotulos_correlacao.get(valor, valor)
+        )
         return html.Div(kpis_header + [
             html.H2("🗺️ Matriz de Correlações & Fatores Críticos", style={"color": "#F8FAFC", "marginTop": "20px"}),
             html.P("A matriz mostra associações lineares (Pearson) entre hábitos e indicadores de desempenho. Associação não implica causalidade.", style={"color": "#c084fc"}),
@@ -747,10 +781,10 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
             data["sleep_hours"],
             bins=[0, 5, 7, 9, float("inf")],
             labels=[
-                "< 5h (Crítico)",
-                "5h-7h (Alerta)",
-                "7h-9h (Adequado)",
-                "> 9h (Alto)"
+                "Menos de 5 h",
+                "5 a 7 h",
+                "7 a 9 h",
+                "Mais de 9 h"
             ],
             right=False
         )
@@ -803,6 +837,21 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
                         graph(criar_grafico_presenca_gpa(data)),
                     ],
                     style=GRID_2
+                ),
+
+                html.Div(
+                    [
+                        graph(criar_grafico_sono_gpa(data)),
+                        graph(criar_grafico_distribuicao_notas(data)),
+                    ],
+                    style=GRID_2
+                ),
+
+                html.Div(
+                    [
+                        graph(criar_grafico_estudo_prova(data)),
+                    ],
+                    style={"marginTop": "20px"}
                 ),
 
                 html.Div(

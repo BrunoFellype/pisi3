@@ -1,6 +1,7 @@
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+import pandas as pd
 
 try:
     from visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
@@ -70,7 +71,10 @@ def criar_heatmap_correlacao(corr_matrix, titulo):
     return fig
 
 def criar_grafico_genero(df):
-    df_gen = df['gender'].value_counts().reset_index()
+    df_gen = df['gender'].replace({
+        "Female": "Feminino",
+        "Male": "Masculino"
+    }).value_counts().reset_index()
     df_gen.columns = ['Gênero', 'Total']
     fig_pz_gen = px.pie(
         df_gen,
@@ -85,7 +89,11 @@ def criar_grafico_genero(df):
     return fig_pz_gen
 
 def criar_grafico_renda(df):
-    df_renda = df['family_income_level'].value_counts().reset_index()
+    df_renda = df['family_income_level'].replace({
+        "Low": "Baixa",
+        "Middle": "Média",
+        "High": "Alta"
+    }).value_counts().reset_index()
     df_renda.columns = ['Renda', 'Total']
     fig_pz_renda = px.pie(
         df_renda,
@@ -115,7 +123,11 @@ def criar_grafico_trabalho(df):
     return fig_pz_job
 
 def criar_grafico_internet(df):
-    df_net = df['internet_quality'].value_counts().reset_index()
+    df_net = df['internet_quality'].replace({
+        "Good": "Boa",
+        "Average": "Média",
+        "Poor": "Ruim"
+    }).value_counts().reset_index()
     df_net.columns = ['Internet', 'Total']
     fig_pz_net = px.pie(
         df_net,
@@ -138,15 +150,85 @@ def criar_grafico_study_gpa(df_disp):
         hover_data=["major", "university_year", "favorite_AI_tool"],
         labels={
             "study_hours_per_day": "Horas de Estudo / Dia",
-            "GPA": "Média Acadêmica (GPA)",
-            "mental_stress_level": "Nível de Estresse"
+            "GPA": "Desempenho acadêmico (GPA)",
+            "mental_stress_level": "Nível de Estresse",
+            "major": "Curso",
+            "university_year": "Ano acadêmico",
+            "favorite_AI_tool": "Ferramenta de IA preferida"
         },
         color_continuous_scale=["#38BDF8", "#818CF8", "#F43F5E"],
         opacity=0.75
     )
     fig_disp.update_traces(marker=dict(size=6))
-    estilizar_grafico(fig_disp, "Impacto do Estudo Diário no Desempenho (GPA)")
+    estilizar_grafico(fig_disp, "Relação entre Estudo Diário e Desempenho (GPA)")
     return fig_disp
+
+def criar_grafico_estudo_prova(df):
+    fig = px.scatter(
+        df,
+        x="study_hours_per_day",
+        y="final_exam_score",
+        labels={
+            "study_hours_per_day": "Horas de estudo por dia",
+            "final_exam_score": "Nota da prova final"
+        },
+        hover_data={
+            "study_hours_per_day": ":.1f",
+            "final_exam_score": ":.1f"
+        },
+        opacity=0.65,
+        color_discrete_sequence=[ASTRA_COLORS["accent_violet"]]
+    )
+    fig.update_traces(marker=dict(size=6, line=dict(width=0.5, color="#0B1120")))
+    estilizar_grafico(fig, "Relação entre Horas de Estudo e Nota da Prova Final")
+    fig.update_yaxes(range=[0, 105])
+    return fig
+
+def criar_grafico_sono_gpa(df):
+    fig = px.scatter(
+        df,
+        x="sleep_hours",
+        y="GPA",
+        labels={
+            "sleep_hours": "Horas de sono por noite",
+            "GPA": "Desempenho acadêmico (GPA, escala de 0 a 4)"
+        },
+        hover_data={
+            "sleep_hours": ":.1f",
+            "GPA": ":.2f"
+        },
+        opacity=0.65,
+        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"]]
+    )
+    fig.update_traces(marker=dict(size=6, line=dict(width=0.5, color="#0B1120")))
+    estilizar_grafico(fig, "Horas de Sono e Desempenho Acadêmico")
+    fig.update_yaxes(range=[0, 4])
+    return fig
+
+def criar_grafico_distribuicao_notas(df):
+    colunas_notas = {
+        "Nota do exame final": "final_exam_score",
+        "Nota das atividades avaliativas": "assignment_score"
+    }
+    dados = pd.DataFrame({
+        rotulo: df[coluna]
+        for rotulo, coluna in colunas_notas.items()
+    }).melt(var_name="Avaliação", value_name="Nota").dropna()
+    fig = px.box(
+        dados,
+        x="Avaliação",
+        y="Nota",
+        color="Avaliação",
+        color_discrete_sequence=[
+            ASTRA_COLORS["accent_cyan"],
+            ASTRA_COLORS["accent_emerald"]
+        ],
+        labels={"Avaliação": "Tipo de avaliação", "Nota": "Nota"},
+        points="outliers"
+    )
+    estilizar_grafico(fig, "Distribuição das Notas Acadêmicas")
+    fig.update_layout(showlegend=False)
+    return fig
 
 def criar_grafico_sono_estresse(df_sono):
     fig_box = px.box(
@@ -154,16 +236,26 @@ def criar_grafico_sono_estresse(df_sono):
         x="faixa_sono",
         y="mental_stress_level",
         color="faixa_sono",
-        category_orders={'faixa_sono': ["< 5h (Crítico)", "5h-7h (Alerta)", "7h-9h (Adequado)", "> 9h (Alto)"]},
+        category_orders={'faixa_sono': ["Menos de 5 h", "5 a 7 h", "7 a 9 h", "Mais de 9 h"]},
         color_discrete_sequence=[
             ASTRA_COLORS["accent_rose"],
             ASTRA_COLORS["accent_amber"],
             ASTRA_COLORS["accent_emerald"],
             ASTRA_COLORS["accent_cyan"]
         ],
-        labels={"faixa_sono": "Faixa de Sono", "mental_stress_level": "Nível de Estresse (1 a 10)"}
+        labels={"faixa_sono": "Faixa de sono", "mental_stress_level": "Nível de estresse (escala de 1 a 10)"}
     )
-    estilizar_grafico(fig_box, "Estresse Reportado por Faixa de Descanso")
+    estilizar_grafico(fig_box, "Distribuição do Estresse por Faixa de Sono")
+    fig_box.update_traces(
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "Mínimo: %{lowerfence:.1f}<br>"
+            "1º quartil (Q1): %{q1:.1f}<br>"
+            "Mediana: %{median:.1f}<br>"
+            "3º quartil (Q3): %{q3:.1f}<br>"
+            "Máximo: %{upperfence:.1f}<extra></extra>"
+        )
+    )
     fig_box.update_layout(showlegend=False)
     return fig_box
 
@@ -181,7 +273,13 @@ def criar_grafico_gpa_major(df):
     return fig_box_major
 
 def criar_grafico_metodos_anotacao(df):
-    df_metodo = df.groupby("note_taking_method", as_index=False)["final_exam_score"].mean().round(1)
+    df_metodo = df.copy()
+    df_metodo["note_taking_method"] = df_metodo["note_taking_method"].replace({
+        "Digital": "Digital",
+        "Handwritten": "Manuscrito",
+        "Mixed": "Misto"
+    })
+    df_metodo = df_metodo.groupby("note_taking_method", as_index=False)["final_exam_score"].mean().round(1)
     fig_metodo = px.bar(
         df_metodo,
         x="note_taking_method",
@@ -195,7 +293,7 @@ def criar_grafico_metodos_anotacao(df):
         text_auto=".1f",
         labels={"note_taking_method": "Método de Anotação", "final_exam_score": "Nota Média no Exame Final"}
     )
-    estilizar_grafico(fig_metodo, "Eficácia Média do Método de Anotação no Exame")
+    estilizar_grafico(fig_metodo, "Nota média no exame final por método de anotação")
     fig_metodo.update_layout(showlegend=False, yaxis_range=[0, 100])
     return fig_metodo
 
@@ -228,9 +326,22 @@ def criar_grafico_cafe_sono(df):
     return fig_cafe
 
 def criar_grafico_clusters(df_cluster, ordem_perfis, mapa_cores_perfis):
-
+    dados = df_cluster.copy()
+    dados["frequencia_exibicao"] = dados["class_attendance_percent"].map(
+        lambda valor: f"{valor:.0f}%"
+    )
+    dados["gpa_exibicao"] = dados["GPA"].map(lambda valor: f"{valor:.2f}".replace(".", ","))
+    dados["estudo_exibicao"] = dados["study_hours_per_day"].map(
+        lambda valor: f"{valor:.1f}".replace(".", ",")
+    )
+    dados["estresse_exibicao"] = dados["mental_stress_level"].map(
+        lambda valor: f"{valor:.1f}".replace(".", ",")
+    )
+    dados["sono_exibicao"] = dados["sleep_hours"].map(
+        lambda valor: f"{valor:.1f}".replace(".", ",")
+    )
     fig_km_scatter = px.scatter(
-        df_cluster,
+        dados,
         x="class_attendance_percent",
         y="GPA",
         color="perfil_cluster",
@@ -242,15 +353,16 @@ def criar_grafico_clusters(df_cluster, ordem_perfis, mapa_cores_perfis):
         color_discrete_map=mapa_cores_perfis,
 
         labels={
-            "class_attendance_percent": "Frequência às Aulas (%)",
-            "GPA": "GPA Acadêmico (0 a 4.0)",
-            "perfil_cluster": "Perfil K-Means"
+            "class_attendance_percent": "Frequência das aulas (%)",
+            "GPA": "Desempenho acadêmico (GPA, escala de 0 a 4)",
+            "perfil_cluster": "Perfil"
         },
-
-        hover_data=[
-            "study_hours_per_day",
-            "mental_stress_level",
-            "sleep_hours"
+        custom_data=[
+            "frequencia_exibicao",
+            "gpa_exibicao",
+            "estudo_exibicao",
+            "estresse_exibicao",
+            "sono_exibicao"
         ]
     )
 
@@ -267,9 +379,19 @@ def criar_grafico_clusters(df_cluster, ordem_perfis, mapa_cores_perfis):
 
     estilizar_grafico(
         fig_km_scatter,
-        "Dispersão dos Perfis: Frequência vs. GPA"
+        "Perfis de Estudantes: Frequência às Aulas e Desempenho Acadêmico"
     )
-
+    fig_km_scatter.update_traces(
+        hovertemplate=(
+            "<b>Perfil: %{fullData.name}</b><br>"
+            "Frequência das aulas: %{customdata[0]}<br>"
+            "Desempenho acadêmico (GPA): %{customdata[1]} de 4,00<br>"
+            "Horas de estudo por dia: %{customdata[2]}<br>"
+            "Nível de estresse: %{customdata[3]}<br>"
+            "Horas de sono por noite: %{customdata[4]}"
+            "<extra></extra>"
+        )
+    )
     fig_km_scatter.update_yaxes(
         range=[0, 4]
     )
@@ -287,9 +409,9 @@ def criar_grafico_perfil_clusters(df, ordem_perfis, cores_cluster_map):
         },
         color_discrete_map= cores_cluster_map,
         barmode="group",
-        labels={"Média": "Média do Hábito", "perfil_cluster": "Perfil"}
+        labels={"Média": "Média observada", "perfil_cluster": "Perfil"}
     )
-    estilizar_grafico(fig_km_bars, "Comparativo dos Hábitos Médios entre os Perfis")
+    estilizar_grafico(fig_km_bars, "Médias observadas dos perfis de estudantes")
     return fig_km_bars
 
 def criar_grafico_presenca_gpa(df):

@@ -18,17 +18,19 @@ def executar_kmeans(df, k_clusters):
     medias_cluster = df.groupby('cluster_id')[features_kmeans].mean()
     ordem_gpa = medias_cluster['GPA'].sort_values(ascending=False).index.tolist()
 
-    rotulos_sugeridos = [
-        "🎓 Perfil 1: Alto Desempenho & Foco",
-        "⚖️ Perfil 2: Rendimento Equilibrado",
-        "⚡ Perfil 3: Tensão & Risco de Burnout",
-        "⚠️ Perfil 4: Desengajamento / Baixa Assiduidade",
-        "🔄 Perfil 5: Hábitos Mistos"
-    ]
-    
+    total_perfis = len(ordem_gpa)
+    emojis_perfis = ["🎓", "⚖️", "⚡", "⚠️", "🔄"]
     mapa_nomes = {}
     for rank, cid in enumerate(ordem_gpa):
-        mapa_nomes[cid] = rotulos_sugeridos[rank] if rank < len(rotulos_sugeridos) else f"Perfil {rank+1}"
+        posicao = rank + 1
+        if posicao == 1:
+            descricao = "Maior desempenho acadêmico"
+        elif posicao == total_perfis:
+            descricao = "Menor desempenho acadêmico"
+        else:
+            descricao = "Desempenho acadêmico intermediário"
+        emoji = emojis_perfis[rank] if rank < len(emojis_perfis) else ""
+        mapa_nomes[cid] = f"{emoji} Perfil {posicao} — {descricao}".strip()
         
     df['perfil_cluster'] = df['cluster_id'].map(mapa_nomes)
 
