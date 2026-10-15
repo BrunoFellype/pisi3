@@ -14,7 +14,7 @@ import plotly.express as px
 from analysis.clusters import executar_kmeans
 from analysis.hipoteses import comparar_desempenho_por_cluster
 from analysis.predicao import treinar_motor_preditivo
-from analysis.correlacoes import calcular_matriz_correlacoes
+from analysis.correlacoes import calcular_correlacoes, calcular_matriz_correlacoes
 from data.load import get_Dataset
 from visualization.graphs import (
     criar_grafico_cafe_sono, criar_grafico_clusters, criar_grafico_desempenho_por_cluster,
@@ -710,10 +710,35 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
     if aba_ativa == "tab-correlacoes":
         matriz_correlacao = calcular_matriz_correlacoes(df=data)
         heatmap = criar_heatmap_correlacao(matriz_correlacao, "Hábitos vs. Desempenho Académico")
+        resultados_correlacao = calcular_correlacoes(df=data)
+        tabela_correlacao = pd.DataFrame(resultados_correlacao["habito_desempenho"])[
+            ["variavel", "desempenho", "correlacao", "spearman", "valor_p",
+             "valor_p_ajustado_fdr", "pares_validos"]
+        ].rename(columns={
+            "variavel": "Hábito",
+            "desempenho": "Desempenho",
+            "correlacao": "Pearson (r)",
+            "spearman": "Spearman (rho)",
+            "valor_p": "p-valor",
+            "valor_p_ajustado_fdr": "p-valor ajustado (FDR)",
+            "pares_validos": "Pares válidos"
+        }).round({"Pearson (r)": 3, "Spearman (rho)": 3, "p-valor": 4,
+                  "p-valor ajustado (FDR)": 4})
         return html.Div(kpis_header + [
             html.H2("🗺️ Matriz de Correlações & Fatores Críticos", style={"color": "#F8FAFC", "marginTop": "20px"}),
-            html.P("Associação linear entre hábitos discentes e notas académicas.", style={"color": "#c084fc"}),
-            graph(heatmap)
+            html.P("A matriz mostra associações lineares (Pearson) entre hábitos e indicadores de desempenho. Associação não implica causalidade.", style={"color": "#c084fc"}),
+            graph(heatmap),
+            html.H3("Correlações com os indicadores de desempenho", style={"color": "#F8FAFC", "marginTop": "20px"}),
+            html.P("Spearman é apresentado como diagnóstico de robustez diante do efeito teto. Os valores-p da família hábito-desempenho foram ajustados pelo método Benjamini-Hochberg (FDR).", style={"color": "#94A3B8"}),
+            dash_table.DataTable(
+                data=tabela_correlacao.to_dict("records"),
+                columns=[{"name": coluna, "id": coluna} for coluna in tabela_correlacao.columns],
+                sort_action="native",
+                page_size=12,
+                style_table={"overflowX": "auto"},
+                style_header={"backgroundColor": ASTRA_COLORS["border_subtle"], "color": ASTRA_COLORS["text_primary"], "fontWeight": "700"},
+                style_cell={"backgroundColor": ASTRA_COLORS["card_dark"], "color": ASTRA_COLORS["text_primary"], "textAlign": "left", "padding": "8px"}
+            )
         ])
 
     if aba_ativa == "tab-geral":

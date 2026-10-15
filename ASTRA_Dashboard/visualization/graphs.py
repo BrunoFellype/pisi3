@@ -59,7 +59,13 @@ def criar_heatmap_correlacao(corr_matrix, titulo):
     )
 
     estilizar_grafico(fig, titulo)
-    fig.update_layout(coloraxis_showscale=False)
+    fig.update_layout(
+        coloraxis_colorbar=dict(
+            title="Correlação",
+            tickvals=[-1, -0.5, 0, 0.5, 1],
+            ticktext=["-1", "-0,5", "0", "0,5", "1"]
+        )
+    )
 
     return fig
 
@@ -190,7 +196,7 @@ def criar_grafico_metodos_anotacao(df):
         labels={"note_taking_method": "Método de Anotação", "final_exam_score": "Nota Média no Exame Final"}
     )
     estilizar_grafico(fig_metodo, "Eficácia Média do Método de Anotação no Exame")
-    fig_metodo.update_layout(showlegend=False, yaxis_range=[80, 105])
+    fig_metodo.update_layout(showlegend=False, yaxis_range=[0, 100])
     return fig_metodo
 
 def criar_grafico_ia_tools(df):

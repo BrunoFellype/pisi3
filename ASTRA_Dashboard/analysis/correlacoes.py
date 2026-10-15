@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, spearmanr
 
 try:
     from data.load import get_Dataset
@@ -42,18 +42,22 @@ def _detalhes_correlacao(df, coluna_x, coluna_y):
         return {
             'correlacao': None,
             'valor_p': None,
+            'spearman': None,
+            'spearman_valor_p': None,
             'pares_validos': 0,
             'sinal': 'indisponível',
             'intensidade': 'não calculável',
             'valida': False
         }
 
-    pares = df[[coluna_x, coluna_y]].apply(pd.to_numeric, errors='coerce').dropna()
-    pares = pares.replace([float('inf'), float('-inf')], pd.NA).dropna()
+    pares = df[[coluna_x, coluna_y]].apply(pd.to_numeric, errors='coerce')
+    pares = pares.replace([float('inf'), float('-inf')], np.nan).dropna()
     if len(pares) < 2 or pares[coluna_x].nunique() < 2 or pares[coluna_y].nunique() < 2:
         return {
             'correlacao': None,
             'valor_p': None,
+            'spearman': None,
+            'spearman_valor_p': None,
             'pares_validos': len(pares),
             'sinal': 'indisponível',
             'intensidade': 'não calculável',
@@ -61,12 +65,17 @@ def _detalhes_correlacao(df, coluna_x, coluna_y):
         }
 
     resultado = pearsonr(pares[coluna_x], pares[coluna_y])
+    resultado_spearman = spearmanr(pares[coluna_x], pares[coluna_y])
     correlacao = float(resultado.statistic)
     valor_p = float(resultado.pvalue)
-    if not np.isfinite(correlacao) or not np.isfinite(valor_p):
+    spearman = float(resultado_spearman.statistic)
+    spearman_valor_p = float(resultado_spearman.pvalue)
+    if not all(np.isfinite(valor) for valor in (correlacao, valor_p, spearman, spearman_valor_p)):
         return {
             'correlacao': None,
             'valor_p': None,
+            'spearman': None,
+            'spearman_valor_p': None,
             'pares_validos': len(pares),
             'sinal': 'indisponível',
             'intensidade': 'não calculável',
@@ -76,8 +85,10 @@ def _detalhes_correlacao(df, coluna_x, coluna_y):
     return {
         'correlacao': correlacao,
         'valor_p': valor_p,
+        'spearman': spearman,
+        'spearman_valor_p': spearman_valor_p,
         'pares_validos': len(pares),
-        'sinal': 'positiva' if correlacao > 0 else 'negativa',
+        'sinal': 'positiva' if correlacao > 0 else 'negativa' if correlacao < 0 else 'nula',
         'intensidade': _classificar_intensidade(correlacao),
         'valida': True
     }
@@ -94,6 +105,23 @@ def _classificar_intensidade(correlacao):
     if intensidade < 0.8:
         return 'forte'
     return 'muito forte'
+
+
+def _ajustar_valores_p_fdr(resultados):
+    validos = [resultado for resultado in resultados if resultado['valor_p'] is not None]
+    valores_p = np.array([resultado['valor_p'] for resultado in validos], dtype=float)
+    ordem = np.argsort(valores_p)
+    ajustes = np.empty(len(valores_p), dtype=float)
+    menor_ajuste = 1.0
+    for posicao in range(len(ordem) - 1, -1, -1):
+        indice = ordem[posicao]
+        menor_ajuste = min(menor_ajuste, valores_p[indice] * len(valores_p) / (posicao + 1))
+        ajustes[indice] = menor_ajuste
+    for resultado, ajuste in zip(validos, ajustes):
+        resultado['valor_p_ajustado_fdr'] = float(np.clip(ajuste, 0, 1))
+    for resultado in resultados:
+        resultado.setdefault('valor_p_ajustado_fdr', None)
+    return len(validos)
 
 
 def calcular_correlacoes(df=None, habitos=None, desempenhos=None):
@@ -121,12 +149,21 @@ def calcular_correlacoes(df=None, habitos=None, desempenhos=None):
             **detalhes
         })
 
+    comparacoes_habito_desempenho = _ajustar_valores_p_fdr(habit_to_performance)
+    comparacoes_habito_habito = _ajustar_valores_p_fdr(habit_to_habit)
+
     return {
         'habito_desempenho': habit_to_performance,
         'habito_habito': habit_to_habit,
         'habitos_disponiveis': [coluna for coluna in habitos if coluna in df.columns],
         'desempenhos_disponiveis': [coluna for coluna in desempenhos if coluna in df.columns],
-        'combinacoes_esperadas': len(habitos) * len(desempenhos)
+        'combinacoes_esperadas': len(habitos) * len(desempenhos),
+        'comparacoes_validas': comparacoes_habito_desempenho + comparacoes_habito_habito,
+        'comparacoes_validas_por_familia': {
+            'habito_desempenho': comparacoes_habito_desempenho,
+            'habito_habito': comparacoes_habito_habito
+        },
+        'ajuste_valores_p': 'Benjamini-Hochberg (FDR), aplicado separadamente por família'
     }
 
 
