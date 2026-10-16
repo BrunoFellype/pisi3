@@ -10,6 +10,7 @@ if str(DASHBOARD_ROOT) not in sys.path:
 from dash import Dash, Input, Output, State, dcc, html, dash_table
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
 from analysis.clusters import executar_kmeans
 from analysis.hipoteses import comparar_desempenho_por_cluster
@@ -26,7 +27,7 @@ from visualization.graphs import (
     criar_grafico_atividade_estresse, criar_grafico_distribuicao_notas,
     criar_grafico_comparacao_modelos,
     criar_grafico_trabalho, criar_heatmap_correlacao,
-    criar_scatter_com_tendencia
+    criar_scatter_com_tendencia, criar_grafico_real_vs_previsto
 )
 from visualization.style import ASTRA_COLORS, estilizar_grafico
 
@@ -425,6 +426,16 @@ def layout_simulador_desempenho():
     motor = obter_motor_preditivo()
     resultados = motor["resultados"].copy().round(3)
 
+    X_test = motor["X_test"]
+    y_test = motor["y_test"]
+    
+    # Gera as previsões do modelo ativo para o grupo de teste isolado (com clip de segurança)
+    y_pred_teste = motor["modelo"].predict(X_test)
+    y_pred_teste = np.clip(y_pred_teste, 0.0, 4.0)
+    
+    # Cria o gráfico de validação real vs previsto pronto para ser exibido
+    fig_validacao = criar_grafico_real_vs_previsto(y_test, y_pred_teste)
+
     return html.Div([
         html.H2("⚡ Simulador de Desempenho (Motor Preditivo)", style={"color": "#38BDF8"}),
         html.P("Simule cenários da rotina de um estudante e estime o impacto no GPA através dos modelos de regressão.",
@@ -444,7 +455,24 @@ def layout_simulador_desempenho():
             style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC", "fontWeight": "bold"},
             style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1", "padding": "10px", "border": "1px solid #334155"}
         ),
+
+        html.Details([
+            html.Summary("🔍 Por que comparamos estes três modelos?", style={"cursor": "pointer", "fontWeight": "600", "color": "#38BDF8"}),
+            dcc.Markdown("""
+        O motor preditivo do ASTRA utiliza uma abordagem de **torneio de algoritmos** para garantir o equilíbrio entre interpretabilidade e precisão:
+        - **Regressão Ridge:** Atua como nosso modelo linear de controle. Usa regularização para lidar com a correlação natural entre hábitos de estudo e estresse sem perder a estabilidade estatística.
+        - **Random Forest:** Capaz de capturar relações não-lineares complexas na rotina dos estudantes através de múltiplas árvores em paralelo, reduzindo a variância.
+        - **Gradient Boosting:** Constrói árvores de forma sequencial focando na correção de erros residuais, buscando extrair o máximo de precisão preditiva do dataset comportamental.
+            """, style={"color": "#CBD5E1", "marginTop": "10px", "fontSize": "0.9rem"})
+        ], style={"marginBottom": "20px", "padding": "12px", "backgroundColor": "#1E293B", "borderRadius": "8px", "border": "1px solid #334155"}), 
+
         graph(criar_grafico_comparacao_modelos(resultados)),
+
+        html.H3("Relatório de Validação do Grupo de Teste (Holdout)", style={"color": "#F8FAFC", "marginTop": "24px", "marginBottom": "12px"}),
+        html.P("Este painel valida o motor utilizando 20% dos dados mantidos em sigilo durante o treinamento. A linha tracejada representa a previsão ideal.",
+               style={"color": "#CBD5E1", "fontSize": "0.9rem", "marginBottom": "16px"}),
+        
+        graph(fig_validacao),
 
         html.H3("Parâmetros da Rotina a Simular", style={"color": "#F8FAFC", "marginBottom": "12px"}),
         html.Div([
@@ -540,6 +568,8 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
         return html.Div()
     
     motor = obter_motor_preditivo()
+    
+    # Dicionário com os valores vindos dos sliders da interface
     values = {
         "study_hours_per_day": estudo,
         "sleep_hours": sono,
@@ -549,11 +579,38 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
         "age": idade
     }
     
-    entrada = pd.DataFrame([{feature: values.get(feature, 0) for feature in motor["features"]}], columns=motor["features"])
+    # -------------------------------------------------------------------------
+    # ATRIBUIÇÃO AUTOMÁTICA DE PERFIL COMPORTAMENTAL PARA A SIMULAÇÃO:
+    # Descobrimos a qual dos 3 perfis comportamentais a nova rotina simulada pertence
+    # -------------------------------------------------------------------------
+    perfil_simulado = "Perfil Comportamental A" # Padrão de segurança
+    try:
+        # Pega os dados simulados e classifica no cluster comportamental correspondente
+        vetor_habitos = np.array([[estudo, sono, estresse, frequencia, redes]])
+        # Como o pipeline armazena o pré-processador e o modelo, podemos estimar o cluster 
+        # avaliando qual perfil se encaixa melhor, ou definimos uma regra simples baseada nos centroides.
+        # Para simplificar e garantir estabilidade sem quebrar, atribuímos o perfil com base no estresse/estudo:
+        if estresse >= 7.0:
+            perfil_simulado = "Perfil Comportamental C"
+        elif estudo >= 5.0:
+            perfil_simulado = "Perfil Comportamental A"
+        else:
+            perfil_simulado = "Perfil Comportamental B"
+    except Exception:
+        perfil_simulado = "Perfil Geral"
+
+    values["cluster_perfil"] = perfil_simulado
+
+    # Monta o DataFrame de entrada contendo todas as features exigidas pelo motor (numéricas + categóricas)
+    entrada = pd.DataFrame(
+        [{feature: values.get(feature, 0) for feature in motor["features"]}], 
+        columns=motor["features"]
+    )
+    
     gpa = max(0.0, min(4.0, float(motor["modelo"].predict(entrada)[0])))
     
     if sono < 5.5 and estresse >= 6.0:
-        classificacao = "Indício de sobrecarga acadêmica"
+        classificacao = "Indício de sobrecarga académica"
         cor_status = "#F43F5E"
         obs = "Atenção: A combinação de sono reduzido e stress elevado prejudica fortemente o rendimento contínuo."
     elif gpa >= 3.5:
@@ -578,8 +635,10 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
                        style={"color": cor_status, "marginTop": "8px", "fontSize": "0.9rem"})
             ])
         ], style=GRID_2),
+        html.P(f"Perfil comportamental atribuído automaticamente à simulação: {perfil_simulado}",
+               style={"color": "#38BDF8", "fontSize": "0.85rem", "marginTop": "8px"}),
         html.P("Nota: Estimativa puramente estatística treinada sobre a base de 10.000 estudantes universitários.",
-               style={"color": "#c084fc", "fontSize": "0.85rem", "marginTop": "12px"})
+               style={"color": "#c084fc", "fontSize": "0.85rem", "marginTop": "4px"})
     ]
 
     try:
@@ -592,7 +651,8 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
                 "sleep_hours": "Horas de sono por noite",
                 "mental_stress_level": "Nível de estresse",
                 "study_hours_per_day": "Horas de estudo por dia",
-                "class_attendance_percent": "Frequência às aulas (%)"
+                "class_attendance_percent": "Frequência às aulas (%)",
+                "cluster_perfil": "Perfil Comportamental"
             }
             nomes_variaveis = [
                 rotulos_variaveis.get(nome.split("__")[-1], nome.split("__")[-1])
@@ -627,9 +687,10 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
     Input("estresse", "value"),
     Input("frequencia", "value"),
     Input("rendas", "value"),
-    Input("metodos", "value")
+    Input("metodos", "value"),
+    Input("k-clusters", "value")
 )
-def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos):
+def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos, k_clusters):
 
     data = filtered_data(qtd, cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos)
 
@@ -657,11 +718,10 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
 
     if aba_ativa == "tab-simulador":
 
-        k = 3
-
-        df_cluster, medias_cluster, ordem_gpa, mapa_nomes = executar_kmeans(
+        # Executa o K-Means usando o 'k' selecionado no slider da barra lateral
+        df_cluster, medias_cluster, ordem_gpa, mapa_nomes, df_metricas_k, silhueta_atual = executar_kmeans(
             data.copy(),
-            k
+            k_clusters
         )
 
         ordem_perfis = [
@@ -687,7 +747,6 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
 
         # Preparação dos dados para o gráfico de perfil dos clusters
         dados_perfil = []
-
         colunas_habitos = {
             "study_hours_per_day": "Horas de Estudo",
             "sleep_hours": "Horas de Sono",
@@ -697,13 +756,11 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
         }
 
         for cluster_id in sorted(df_cluster["cluster_id"].unique()):
-
             perfil = df_cluster[
                 df_cluster["cluster_id"] == cluster_id
             ]["perfil_cluster"].iloc[0]
 
             for coluna, nome_habito in colunas_habitos.items():
-
                 dados_perfil.append({
                     "Hábito": nome_habito,
                     "Média": df_cluster.loc[
@@ -713,26 +770,59 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
                     "perfil_cluster": perfil,
                     "cluster_id": cluster_id
                 })
+        # Preparação dos dados para o gráfico de perfil dos clusters com escala normalizada (0-100%)
+        dados_perfil = []
+
+        colunas_habitos = {
+            "study_hours_per_day": ("Horas de Estudo", 0, 10),       # (Nome, min_teorico, max_teorico)
+            "sleep_hours": ("Horas de Sono", 0, 10),
+            "mental_stress_level": ("Nível de Estresse", 0, 10),
+            "class_attendance_percent": ("Frequência", 0, 100),
+            "GPA": ("GPA (Proporcional)", 0, 4)
+        }
+
+        for cluster_id in sorted(df_cluster["cluster_id"].unique()):
+            perfil = df_cluster[df_cluster["cluster_id"] == cluster_id]["perfil_cluster"].iloc[0]
+
+            for coluna, (nome_habito, min_val, max_val) in colunas_habitos.items():
+                media_real = df_cluster.loc[df_cluster["cluster_id"] == cluster_id, coluna].mean()
+                
+                # Normaliza para porcentagem (0 a 100) para ficarem perfeitamente comparáveis no mesmo eixo
+                media_normalizada = ((media_real - min_val) / (max_val - min_val)) * 100
+                media_normalizada = max(0, min(100, media_normalizada)) # Garante entre 0 e 100
+
+                dados_perfil.append({
+                    "Hábito": nome_habito,
+                    "Média": round(media_normalizada, 1),
+                    "Média Real": round(media_real, 2), # Guardamos o real caso queira usar em tooltip
+                    "perfil_cluster": perfil,
+                    "cluster_id": cluster_id
+                })
 
         df_perfil = pd.DataFrame(dados_perfil)
-
-        # Gráfico comparativo dos perfis
         grafico_perfil = criar_grafico_perfil_clusters(
             df_perfil, ordem_perfis, mapa_cores_perfis
         )
+
+        # Avaliação qualitativa rápida da silhueta atual
+        qualidade_silhueta = "Boa separação" if silhueta_atual >= 0.35 else "Separação moderada/fraca"
 
         return html.Div(
             kpis_header + [
 
                 html.H2(
-                    "Perfis de estudantes — agrupamento K-Means",
+                    f"Perfis de estudantes — Agrupamento K-Means (k = {k_clusters})",
                     style={"marginTop": "30px"}
                 ),
-
                 html.P(
-                    "Segmentação dos estudantes de acordo com seus hábitos e desempenho acadêmico.",
+                    "Segmentação dos estudantes com base em hábitos padronizados e desempenho acadêmico.",
                     style={"color": "#94A3B8"}
                 ),
+
+                # Card com a métrica de silhueta atual do K escolhido
+                html.Div([
+                    metric(f"Silhouette Score (k={k_clusters})", f"{silhueta_atual:.3f}", qualidade_silhueta),
+                ], style={"marginBottom": "20px", "maxWidth": "350px"}),
 
                 html.Div(
                     [
@@ -741,6 +831,23 @@ def renderizar_conteudo_abas(aba_ativa, qtd, cursos, anos, generos, idade, traba
                     ],
                     style=GRID_2
                 ),
+
+                # Seção Inferior: Relatório Geral Quantitativo dos diferentes 'k'
+                html.Hr(style={"borderColor": "#334155", "margin": "40px 0"}),
+                
+                html.H3("📊 Relatório Informativo: Comparativo entre Diferentes Valores de K (2 a 5)", 
+                        style={"color": "#F8FAFC", "marginBottom": "10px"}),
+                html.P("Análise de inércia e qualidade de silhueta para todos os cenários testados em segundo plano:",
+                       style={"color": "#94A3B8", "marginBottom": "16px"}),
+                
+                dash_table.DataTable(
+                    data=df_metricas_k.to_dict("records"),
+                    columns=[{"name": col, "id": col} for col in df_metricas_k.columns],
+                    style_table={"overflowX": "auto", "marginBottom": "28px"},
+                    style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC", "fontWeight": "bold"},
+                    style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1", "padding": "10px", "border": "1px solid #334155"}
+                ),
+
                 html.Hr(
                     style={
                         "borderColor": "#334155",

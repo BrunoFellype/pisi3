@@ -459,78 +459,40 @@ def criar_grafico_cafe_sono(df):
     fig_cafe.update_layout(coloraxis_showscale=False)
     return fig_cafe
 
-def criar_grafico_clusters(df_cluster, ordem_perfis, mapa_cores_perfis):
-    dados = df_cluster.copy()
-    dados["frequencia_exibicao"] = dados["class_attendance_percent"].map(
-        lambda valor: f"{valor:.0f}%"
-    )
-    dados["gpa_exibicao"] = dados["GPA"].map(lambda valor: f"{valor:.2f}".replace(".", ","))
-    dados["estudo_exibicao"] = dados["study_hours_per_day"].map(
-        lambda valor: f"{valor:.1f}".replace(".", ",")
-    )
-    dados["estresse_exibicao"] = dados["mental_stress_level"].map(
-        lambda valor: f"{valor:.1f}".replace(".", ",")
-    )
-    dados["sono_exibicao"] = dados["sleep_hours"].map(
-        lambda valor: f"{valor:.1f}".replace(".", ",")
-    )
-    fig_km_scatter = px.scatter(
-        dados,
-        x="class_attendance_percent",
-        y="GPA",
-        color="perfil_cluster",
-
-        category_orders={
-            "perfil_cluster": ordem_perfis
-        },
-
+def criar_grafico_clusters(df, ordem_perfis, mapa_cores_perfis):
+    fig = px.scatter(
+        df,
+        x='PC1',                    # <--- Usa o Componente Principal 1
+        y='PC2',                    # <--- Usa o Componente Principal 2
+        color='perfil_cluster',
+        category_orders={"perfil_cluster": ordem_perfis},
         color_discrete_map=mapa_cores_perfis,
-
+        opacity=0.6,                # <--- Transparência para ver onde há mais concentração
         labels={
-            "class_attendance_percent": "Frequência das aulas (%)",
-            "GPA": "Desempenho acadêmico (GPA, escala de 0 a 4)",
-            "perfil_cluster": "Perfil"
-        },
-        custom_data=[
-            "frequencia_exibicao",
-            "gpa_exibicao",
-            "estudo_exibicao",
-            "estresse_exibicao",
-            "sono_exibicao"
-        ]
+            'PC1': 'Componente Principal 1 (Hábitos & Rotina)',
+            'PC2': 'Componente Principal 2 (Desempenho & Stress)',
+            'perfil_cluster': 'Perfil do Estudante'
+        }
     )
-
-    fig_km_scatter.update_traces(
-        marker=dict(
-            size=8,
-            opacity=0.8,
-            line=dict(
-                width=0.8,
-                color="#0B1120"
-            )
-        )
+    
+    # Deixa os pontos menores e com uma bordinha sutil para definição limpa
+    fig.update_traces(
+        marker=dict(size=6, line=dict(width=0.3, color='#0F172A'))
     )
-
-    estilizar_grafico(
-        fig_km_scatter,
-        "Perfis de Estudantes: Frequência às Aulas e Desempenho Acadêmico"
+    fig.update_layout(
+        legend=dict(
+            orientation="h",       # Coloca os itens da legenda na horizontal
+            yanchor="top",
+            y=-0.25,               # Joga a legenda um pouco mais para baixo do eixo X
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11)     # Tamanho de fonte ideal para leitura
+        ),
+        margin=dict(t=40, b=100)   # Aumenta a margem inferior para acomodar as linhas da legenda
     )
-    fig_km_scatter.update_traces(
-        hovertemplate=(
-            "<b>Perfil: %{fullData.name}</b><br>"
-            "Frequência das aulas: %{customdata[0]}<br>"
-            "Desempenho acadêmico (GPA): %{customdata[1]} de 4,00<br>"
-            "Horas de estudo por dia: %{customdata[2]}<br>"
-            "Nível de estresse: %{customdata[3]}<br>"
-            "Horas de sono por noite: %{customdata[4]}"
-            "<extra></extra>"
-        )
-    )
-    fig_km_scatter.update_yaxes(
-        range=[0, 4]
-    )
-
-    return fig_km_scatter
+    
+    estilizar_grafico(fig, "Espaço Latente dos Estudantes (PCA) — Agrupamento K-Means")
+    return fig
 
 def criar_grafico_perfil_clusters(df, ordem_perfis, cores_cluster_map):
     fig_km_bars = px.bar(
@@ -546,6 +508,17 @@ def criar_grafico_perfil_clusters(df, ordem_perfis, cores_cluster_map):
         labels={"Média": "Média observada", "perfil_cluster": "Perfil"}
     )
     estilizar_grafico(fig_km_bars, "Médias observadas dos perfis de estudantes")
+    fig_km_bars.update_layout(
+    legend=dict(
+        orientation="h",       # Coloca os itens da legenda na horizontal (um do lado do outro)
+        yanchor="top",
+        y=-0.2,                # Joga a legenda para baixo do eixo X
+        xanchor="center",
+        x=0.5,
+        font=dict(size=10)     # Diminui um pouco o tamanho da fonte
+    ),
+    margin=dict(t=40, b=80)    # Aumenta a margem inferior para a legenda caber sem cortar
+    )
     return fig_km_bars
 
 def criar_grafico_presenca_gpa(df):
@@ -585,4 +558,35 @@ def criar_grafico_desempenho_por_cluster(df_cluster):
         title="Desempenho médio por cluster"
     )
     estilizar_grafico(fig, "Desempenho médio por cluster")
+    return fig
+
+def criar_grafico_real_vs_previsto(y_test, y_pred):
+    """
+    Gera um gráfico comparando os valores reais vs previstos no conjunto de teste.
+    """
+    df_avaliacao = pd.DataFrame({
+        "GPA Real": y_test,
+        "GPA Previsto": y_pred
+    })
+    
+    fig = px.scatter(
+        df_avaliacao,
+        x="GPA Real",
+        y="GPA Previsto",
+        opacity=0.5,
+        labels={"GPA Real": "GPA Real (Observado)", "GPA Previsto": "GPA Previsto (Modelo)"}
+    )
+    
+    # Adiciona uma linha de referência ideal (45 graus, onde Real == Previsto)
+    min_val = min(df_avaliacao["GPA Real"].min(), df_avaliacao["GPA Previsto"].min())
+    max_val = max(df_avaliacao["GPA Real"].max(), df_avaliacao["GPA Previsto"].max())
+    
+    fig.add_shape(
+        type="line",
+        x0=min_val, y0=min_val,
+        x1=max_val, y1=max_val,
+        line=dict(color="#38BDF8", dash="dash", width=2)
+    )
+    
+    estilizar_grafico(fig, "Validação do Grupo de Teste: GPA Real vs. Previsto")
     return fig
