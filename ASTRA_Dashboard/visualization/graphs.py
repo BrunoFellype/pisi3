@@ -3,6 +3,7 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 from plotly.subplots import make_subplots
+import statsmodels
 
 try:
     from visualization.style import estilizar_grafico, ASTRA_COLORS, CATEGORICAL_PALETTE
@@ -72,22 +73,55 @@ def criar_heatmap_correlacao(corr_matrix, titulo):
     return fig
 
 def criar_grafico_genero(df):
-    df_gen = df['gender'].replace({
-        "Female": "Feminino",
-        "Male": "Masculino"
-    }).value_counts().reset_index()
-    df_gen.columns = ['Gênero', 'Total']
-    fig_pz_gen = px.pie(
-        df_gen,
-        names='Gênero',
-        values='Total',
-        hole=0.45,
-        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"], ASTRA_COLORS["accent_rose"], ASTRA_COLORS["accent_amber"]]
+    df_gen = (
+        df["gender"]
+        .replace({
+            "Female": "Feminino",
+            "Male": "Masculino"
+        })
+        .value_counts()
+        .rename_axis("Gênero")
+        .reset_index(name="Total")
     )
-    fig_pz_gen.update_traces(textposition='inside', textinfo='percent+label')
-    estilizar_grafico(fig_pz_gen, "Distribuição por Gênero")
-    fig_pz_gen.update_layout(showlegend=False)
-    return fig_pz_gen
+
+    df_gen["Percentual"] = df_gen["Total"] / df_gen["Total"].sum() * 100
+
+    fig = px.bar(
+        df_gen,
+        x="Percentual",
+        y="Gênero",
+        orientation="h",
+        text="Percentual",
+        custom_data=["Total"],
+        color="Gênero",
+        color_discrete_sequence=[
+            ASTRA_COLORS["accent_cyan"],
+            ASTRA_COLORS["accent_rose"]
+        ]
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="outside",
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Estudantes: %{customdata[0]}<br>"
+            "Percentual: %{x:.1f}%"
+            "<extra></extra>"
+        )
+    )
+
+    estilizar_grafico(fig, "Distribuição por Gênero")
+
+    fig.update_layout(
+        showlegend=False,
+        xaxis_title="Percentual de estudantes (%)",
+        yaxis_title=None,
+        xaxis_range=[0, 110],
+        margin=dict(l=30, r=45, t=65, b=45)
+    )
+
+    return fig
 
 def criar_grafico_distribuicao_gpa(df):
     fig = px.histogram(
@@ -96,73 +130,224 @@ def criar_grafico_distribuicao_gpa(df):
         nbins=20,
         range_x=[0, 4],
         labels={
-            "GPA": "Desempenho acadêmico (GPA, escala de 0 a 4)",
+            "GPA": "GPA",
             "count": "Quantidade de estudantes"
         },
-        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"]]
+        color_discrete_sequence=[
+            ASTRA_COLORS["accent_cyan"]
+        ]
     )
+
     fig.update_traces(
+        marker_line_width=0,
         hovertemplate=(
-            "Faixa de GPA: %{x}<br>"
-            "Quantidade de estudantes: %{y}<extra></extra>"
+            "Faixa de GPA: %{x:.2f}<br>"
+            "Quantidade de estudantes: %{y}"
+            "<extra></extra>"
         )
     )
-    estilizar_grafico(fig, "Distribuição do Desempenho Acadêmico (GPA)")
-    fig.update_layout(bargap=0.08)
+
+    estilizar_grafico(
+        fig,
+        "Distribuição do GPA"
+    )
+
+    fig.update_layout(
+        bargap=0.08,
+        height=360,
+        xaxis=dict(
+            title="GPA (escala de 0 a 4)",
+            range=[0, 4]
+        ),
+        yaxis_title="Quantidade de estudantes",
+        margin=dict(l=55, r=25, t=65, b=55)
+    )
+
     return fig
 
 def criar_grafico_renda(df):
-    df_renda = df['family_income_level'].replace({
-        "Low": "Baixa",
-        "Middle": "Média",
-        "High": "Alta"
-    }).value_counts().reset_index()
-    df_renda.columns = ['Renda', 'Total']
-    fig_pz_renda = px.pie(
-        df_renda,
-        names='Renda',
-        values='Total',
-        hole=0.45,
-        color_discrete_sequence=[ASTRA_COLORS["accent_emerald"], ASTRA_COLORS["accent_amber"], ASTRA_COLORS["accent_rose"]]
+    ordem_renda = ["Baixa", "Média", "Alta"]
+
+    df_renda = (
+        df["family_income_level"]
+        .replace({
+            "Low": "Baixa",
+            "Middle": "Média",
+            "High": "Alta"
+        })
+        .value_counts()
+        .reindex(ordem_renda, fill_value=0)
+        .rename_axis("Renda")
+        .reset_index(name="Total")
     )
-    fig_pz_renda.update_traces(textposition='inside', textinfo='percent+label')
-    estilizar_grafico(fig_pz_renda, "Renda Familiar")
-    fig_pz_renda.update_layout(showlegend=False)
-    return fig_pz_renda
+
+    df_renda["Percentual"] = (
+        df_renda["Total"] / df_renda["Total"].sum() * 100
+    )
+
+    fig = px.bar(
+        df_renda,
+        x="Percentual",
+        y="Renda",
+        orientation="h",
+        text="Percentual",
+        custom_data=["Total"],
+        color="Renda",
+        category_orders={"Renda": ordem_renda},
+        color_discrete_map={
+            "Baixa": ASTRA_COLORS["accent_rose"],
+            "Média": ASTRA_COLORS["accent_amber"],
+            "Alta": ASTRA_COLORS["accent_emerald"]
+        }
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="outside",
+        hovertemplate=(
+            "<b>Renda %{y}</b><br>"
+            "Estudantes: %{customdata[0]}<br>"
+            "Percentual: %{x:.1f}%"
+            "<extra></extra>"
+        )
+    )
+
+    estilizar_grafico(fig, "Distribuição da Renda Familiar")
+
+    fig.update_layout(
+        showlegend=False,
+        xaxis_title="Percentual de estudantes (%)",
+        yaxis_title=None,
+        xaxis_range=[0, 110],
+        yaxis=dict(autorange="reversed"),
+        margin=dict(l=30, r=45, t=65, b=45)
+    )
+
+    return fig
 
 def criar_grafico_trabalho(df):
-    df_job = df['part_time_job'].replace({'Yes': 'Trabalha', 'No': 'Não Trabalha'}).value_counts().reset_index()
-    df_job.columns = ['Trabalho', 'Total']
-    fig_pz_job = px.pie(
-        df_job,
-        names='Trabalho',
-        values='Total',
-        hole=0.45,
-        color_discrete_sequence=[ASTRA_COLORS["accent_indigo"], ASTRA_COLORS["accent_teal"]]
+    df_job = (
+        df["part_time_job"]
+        .replace({
+            "Yes": "Trabalha",
+            "No": "Não trabalha"
+        })
+        .value_counts()
+        .reindex(["Trabalha", "Não trabalha"], fill_value=0)
+        .rename_axis("Trabalho")
+        .reset_index(name="Total")
     )
-    fig_pz_job.update_traces(textposition='inside', textinfo='percent+label')
-    estilizar_grafico(fig_pz_job, "Trabalho Meio Período")
-    fig_pz_job.update_layout(showlegend=False)
-    return fig_pz_job
+
+    df_job["Percentual"] = (
+        df_job["Total"] / df_job["Total"].sum() * 100
+    )
+
+    df_job["Categoria"] = "Estudantes"
+
+    fig = px.bar(
+        df_job,
+        x="Percentual",
+        y="Categoria",
+        color="Trabalho",
+        orientation="h",
+        text="Percentual",
+        custom_data=["Total"],
+        color_discrete_map={
+            "Trabalha": ASTRA_COLORS["accent_indigo"],
+            "Não trabalha": ASTRA_COLORS["accent_teal"]
+        }
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="inside",
+        insidetextanchor="middle",
+        hovertemplate=(
+            "<b>%{fullData.name}</b><br>"
+            "Estudantes: %{customdata[0]}<br>"
+            "Percentual: %{x:.1f}%"
+            "<extra></extra>"
+        )
+    )
+
+    estilizar_grafico(fig, "Trabalho em Meio Período")
+
+    fig.update_layout(
+        barmode="stack",
+        xaxis_title="Percentual de estudantes (%)",
+        yaxis_title=None,
+        xaxis_range=[0, 100],
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            y=-0.35,
+            x=0.5,
+            xanchor="center"
+        ),
+        margin=dict(l=30, r=30, t=65, b=75)
+    )
+
+    return fig
 
 def criar_grafico_internet(df):
-    df_net = df['internet_quality'].replace({
-        "Good": "Boa",
-        "Average": "Média",
-        "Poor": "Ruim"
-    }).value_counts().reset_index()
-    df_net.columns = ['Internet', 'Total']
-    fig_pz_net = px.pie(
-        df_net,
-        names='Internet',
-        values='Total',
-        hole=0.45,
-        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"], ASTRA_COLORS["accent_indigo"], ASTRA_COLORS["accent_rose"]]
+    ordem_internet = ["Ruim", "Média", "Boa"]
+
+    df_net = (
+        df["internet_quality"]
+        .replace({
+            "Poor": "Ruim",
+            "Average": "Média",
+            "Good": "Boa"
+        })
+        .value_counts()
+        .reindex(ordem_internet, fill_value=0)
+        .rename_axis("Internet")
+        .reset_index(name="Total")
     )
-    fig_pz_net.update_traces(textposition='inside', textinfo='percent+label')
-    estilizar_grafico(fig_pz_net, "Qualidade da Internet")
-    fig_pz_net.update_layout(showlegend=False)
-    return fig_pz_net
+
+    df_net["Percentual"] = (
+        df_net["Total"] / df_net["Total"].sum() * 100
+    )
+
+    fig = px.bar(
+        df_net,
+        x="Percentual",
+        y="Internet",
+        orientation="h",
+        text="Percentual",
+        custom_data=["Total"],
+        color="Internet",
+        category_orders={"Internet": ordem_internet},
+        color_discrete_map={
+            "Ruim": ASTRA_COLORS["accent_rose"],
+            "Média": ASTRA_COLORS["accent_amber"],
+            "Boa": ASTRA_COLORS["accent_cyan"]
+        }
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="outside",
+        hovertemplate=(
+            "<b>Internet %{y}</b><br>"
+            "Estudantes: %{customdata[0]}<br>"
+            "Percentual: %{x:.1f}%"
+            "<extra></extra>"
+        )
+    )
+
+    estilizar_grafico(fig, "Qualidade da Internet")
+
+    fig.update_layout(
+        showlegend=False,
+        xaxis_title="Percentual de estudantes (%)",
+        yaxis_title=None,
+        xaxis_range=[0, 110],
+        yaxis=dict(autorange="reversed"),
+        margin=dict(l=30, r=45, t=65, b=45)
+    )
+
+    return fig
 
 def criar_grafico_study_gpa(df_disp):
     fig_disp = px.scatter(
@@ -289,27 +474,59 @@ def criar_grafico_sono_gpa(df):
 
 def criar_grafico_distribuicao_notas(df):
     colunas_notas = {
-        "Nota do exame final": "final_exam_score",
-        "Nota das atividades avaliativas": "assignment_score"
+        "Prova final": "final_exam_score",
+        "Atividades": "assignment_score"
     }
+
     dados = pd.DataFrame({
         rotulo: df[coluna]
         for rotulo, coluna in colunas_notas.items()
-    }).melt(var_name="Avaliação", value_name="Nota").dropna()
+    }).melt(
+        var_name="Avaliação",
+        value_name="Nota"
+    ).dropna()
+
     fig = px.box(
         dados,
         x="Avaliação",
         y="Nota",
         color="Avaliação",
-        color_discrete_sequence=[
-            ASTRA_COLORS["accent_cyan"],
-            ASTRA_COLORS["accent_emerald"]
-        ],
-        labels={"Avaliação": "Tipo de avaliação", "Nota": "Nota"},
+        color_discrete_map={
+            "Prova final": ASTRA_COLORS["accent_cyan"],
+            "Atividades": ASTRA_COLORS["accent_emerald"]
+        },
+        labels={
+            "Avaliação": "Tipo de avaliação",
+            "Nota": "Nota obtida"
+        },
         points="outliers"
     )
-    estilizar_grafico(fig, "Distribuição das Notas Acadêmicas")
-    fig.update_layout(showlegend=False)
+
+    fig.update_traces(
+        line_width=2,
+        hovertemplate=(
+            "Avaliação: %{x}<br>"
+            "Nota: %{y:.2f}"
+            "<extra></extra>"
+        )
+    )
+
+    estilizar_grafico(
+        fig,
+        "Distribuição das Notas Acadêmicas"
+    )
+
+    fig.update_layout(
+        height=420,
+        showlegend=False,
+        xaxis_title=None,
+        yaxis=dict(
+            title="Nota",
+            range=[0, 100]
+        ),
+        margin=dict(l=55, r=25, t=65, b=55)
+    )
+
     return fig
 
 def criar_grafico_comparacao_modelos(resultados):
@@ -589,4 +806,71 @@ def criar_grafico_real_vs_previsto(y_test, y_pred):
     )
     
     estilizar_grafico(fig, "Validação do Grupo de Teste: GPA Real vs. Previsto")
+    return fig
+
+def criar_grafico_dispersao_correlacao(df, coluna_x, coluna_y):
+    rotulos = {
+        "study_hours_per_day": "Horas de estudo por dia",
+        "class_attendance_percent": "Frequência às aulas (%)",
+        "sleep_hours": "Horas de sono por dia",
+        "screen_time_hours": "Tempo de tela por dia (horas)",
+        "social_media_hours": "Tempo em redes sociais (horas)",
+        "gaming_hours": "Tempo com jogos (horas)",
+        "exercise_hours_per_week": "Atividade física (horas por semana)",
+        "mental_stress_level": "Nível de estresse",
+        "AI_tool_usage_hours": "Uso de ferramentas de IA (horas)",
+        "exam_preparation_days": "Dias de preparação para provas",
+        "coffee_consumption_per_day": "Consumo diário de café",
+        "extracurricular_hours_per_week": "Atividades extracurriculares (horas por semana)",
+        "GPA": "GPA",
+        "final_exam_score": "Nota da prova final",
+        "assignment_score": "Nota das atividades"
+    }
+
+    dados = df[[coluna_x, coluna_y]].copy()
+    dados[coluna_x] = pd.to_numeric(dados[coluna_x], errors="coerce")
+    dados[coluna_y] = pd.to_numeric(dados[coluna_y], errors="coerce")
+
+    dados = dados.replace([np.inf, -np.inf], np.nan).dropna()
+
+    nome_x = rotulos.get(coluna_x, coluna_x)
+    nome_y = rotulos.get(coluna_y, coluna_y)
+
+    fig = px.scatter(
+        dados,
+        x=coluna_x,
+        y=coluna_y,
+        labels={
+            coluna_x: nome_x,
+            coluna_y: nome_y
+        },
+        opacity=0.6,
+        color_discrete_sequence=[ASTRA_COLORS["accent_cyan"]],
+        trendline="ols",
+        hover_data={
+            coluna_x: ":.2f",
+            coluna_y: ":.2f"
+        }
+    )
+
+    estilizar_grafico(
+        fig,
+        f"{nome_x} × {nome_y}"
+    )
+
+    fig.update_layout(
+        height=450,
+        xaxis_title=nome_x,
+        yaxis_title=nome_y,
+        margin=dict(l=60, r=30, t=70, b=60)
+    )
+
+    fig.update_traces(
+        line=dict(
+            color=ASTRA_COLORS["accent_rose"],
+            width=3,
+        ),
+        selector=dict(mode="lines")
+    )
+
     return fig
