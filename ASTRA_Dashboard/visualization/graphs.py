@@ -677,6 +677,11 @@ def criar_grafico_cafe_sono(df):
     return fig_cafe
 
 def criar_grafico_clusters(df, ordem_perfis, mapa_cores_perfis):
+    # Variância explicada por cada componente (calculada em executar_kmeans)
+    variancia = df.attrs.get('pca_variancia_explicada', [])
+    sufixo_pc1 = f" — {variancia[0] * 100:.1f}% da variância" if len(variancia) > 0 else ""
+    sufixo_pc2 = f" — {variancia[1] * 100:.1f}% da variância" if len(variancia) > 1 else ""
+
     fig = px.scatter(
         df,
         x='PC1',                    # <--- Usa o Componente Principal 1
@@ -686,8 +691,10 @@ def criar_grafico_clusters(df, ordem_perfis, mapa_cores_perfis):
         color_discrete_map=mapa_cores_perfis,
         opacity=0.6,                # <--- Transparência para ver onde há mais concentração
         labels={
-            'PC1': 'Componente Principal 1 (Hábitos & Rotina)',
-            'PC2': 'Componente Principal 2 (Desempenho & Stress)',
+            # PC1: frequência e estudo (+), estresse e redes sociais (−)
+            'PC1': f'PC1: Engajamento acadêmico{sufixo_pc1}',
+            # PC2: estresse, redes sociais e estudo (+), sono (−)
+            'PC2': f'PC2: Sobrecarga e distração{sufixo_pc2}',
             'perfil_cluster': 'Perfil do Estudante'
         }
     )
@@ -709,6 +716,39 @@ def criar_grafico_clusters(df, ordem_perfis, mapa_cores_perfis):
     )
     
     estilizar_grafico(fig, "Espaço Latente dos Estudantes (PCA) — Agrupamento K-Means")
+    return fig
+
+def criar_grafico_cotovelo_silhueta(df_metricas_k, k_escolhido=None):
+    """
+    Método do cotovelo (inércia) e coeficiente de silhueta para cada valor de k.
+    """
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=("Método do Cotovelo (Inércia)", "Coeficiente de Silhueta")
+    )
+    fig.add_trace(go.Scatter(
+        x=df_metricas_k["k"], y=df_metricas_k["Inércia"],
+        mode="lines+markers", name="Inércia",
+        line=dict(color=ASTRA_COLORS["accent_cyan"], width=2)
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df_metricas_k["k"], y=df_metricas_k["Silhouette Score"],
+        mode="lines+markers", name="Silhueta",
+        line=dict(color=ASTRA_COLORS["accent_amber"], width=2)
+    ), row=1, col=2)
+
+    if k_escolhido is not None:
+        for coluna in (1, 2):
+            fig.add_vline(x=k_escolhido, line_dash="dash",
+                          line_color=ASTRA_COLORS["accent_rose"], row=1, col=coluna)
+
+    estilizar_grafico(fig, "Escolha do número de perfis (k)")
+    fig.update_xaxes(title_text="Número de grupos (k)", dtick=1,
+                     gridcolor=ASTRA_COLORS["border_subtle"])
+    fig.update_yaxes(gridcolor=ASTRA_COLORS["border_subtle"])
+    fig.update_yaxes(title_text="Inércia", row=1, col=1)
+    fig.update_yaxes(title_text="Silhueta", row=1, col=2)
+    fig.update_layout(showlegend=False)
     return fig
 
 def criar_grafico_perfil_clusters(df, ordem_perfis, cores_cluster_map):

@@ -70,7 +70,13 @@ def _detalhes_correlacao(df, coluna_x, coluna_y):
     valor_p = float(resultado.pvalue)
     spearman = float(resultado_spearman.statistic)
     spearman_valor_p = float(resultado_spearman.pvalue)
-    if not all(np.isfinite(valor) for valor in (correlacao, valor_p, spearman, spearman_valor_p)):
+
+    # Com poucos pares (ex.: 2), versões recentes do SciPy devolvem p-valor NaN.
+    # O coeficiente continua válido; apenas o p-valor fica indisponível.
+    valor_p = valor_p if np.isfinite(valor_p) else None
+    spearman_valor_p = spearman_valor_p if np.isfinite(spearman_valor_p) else None
+
+    if not all(np.isfinite(valor) for valor in (correlacao, spearman)):
         return {
             'correlacao': None,
             'valor_p': None,

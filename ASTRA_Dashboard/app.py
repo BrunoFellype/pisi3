@@ -14,14 +14,14 @@ import numpy as np
 
 from analysis.correlacoes import HABIT_VARIABLES, PERFORMANCE_VARIABLES
 from analysis.clusters import executar_kmeans
-from analysis.predicao import treinar_motor_preditivo
+from analysis.predicao import treinar_motor_preditivo, atribuir_perfil, FEATURES_HABITOS_CLUSTER
 from analysis.correlacoes import calcular_correlacoes, calcular_matriz_correlacoes
 from data.load import get_Dataset
 from visualization.graphs import (
     criar_grafico_clusters, criar_grafico_gpa_major, criar_grafico_genero,
     criar_grafico_internet, criar_grafico_perfil_clusters, criar_grafico_renda,
     criar_grafico_distribuicao_gpa, criar_grafico_distribuicao_notas,
-    criar_grafico_comparacao_modelos,
+    criar_grafico_comparacao_modelos, criar_grafico_cotovelo_silhueta,
     criar_grafico_trabalho, criar_heatmap_correlacao,
     criar_grafico_real_vs_previsto, criar_grafico_dispersao_correlacao
 )
@@ -325,18 +325,6 @@ def filtered_data(cursos, anos, generos, idade, trabalho, estresse, frequencia, 
     return data
 
 
-def preparar_clusterizacao(data, k):
-    modelo, labels = executar_kmeans(data.copy(), k)
-    clustered = data.copy()
-    clustered["cluster_id"] = labels
-    medias_cluster = clustered.groupby("cluster_id")["GPA"].mean().sort_values()
-    order = list(medias_cluster.index)
-    names = {cluster_id: f"Perfil {i + 1}" for i, cluster_id in enumerate(order)}
-    clustered["perfil_cluster"] = clustered["cluster_id"].map(names)
-    means = clustered.groupby("cluster_id")[["GPA", "final_exam_score", "class_attendance_percent", "study_hours_per_day", "sleep_hours", "mental_stress_level", "social_media_hours"]].mean()
-    return clustered, means, order, names
-
-
 def project_section():
     return html.Section([
         html.H2(
@@ -570,7 +558,11 @@ Sendo relevante destacar que dentro das 27 variáveis, 3 são consideradas essen
             dcc.Markdown("""
 O algoritmo **K-Means** é utilizado para agrupar estudantes com características semelhantes, permitindo explorar diferentes perfis presentes no conjunto de dados.
 
-O procedimento é executado para diferentes quantidades de grupos, com valores de **K entre 2 e 5**.
+As variáveis de entrada são cinco hábitos: horas de estudo, horas de sono, nível de estresse, frequência às aulas e horas em redes sociais. Todas são padronizadas com **StandardScaler** (média 0 e desvio padrão 1). O **GPA não entra** no agrupamento: ele é usado apenas para ordenar e nomear os perfis encontrados.
+
+O procedimento é executado para diferentes quantidades de grupos, com valores de **K entre 2 e 8**.
+
+Para visualizar os perfis em duas dimensões, aplica-se a **PCA** (Análise de Componentes Principais) sobre as variáveis padronizadas. A PCA serve só para o gráfico; o K-Means roda no espaço completo das cinco variáveis.
 
 A avaliação dos agrupamentos considera duas métricas principais:
 
@@ -608,9 +600,11 @@ Os resultados permitem comparar as configurações testadas e examinar as caract
 
         Para isso, o dashboard compara três algoritmos de regressão:
 
-        - **Regressão Linear:** modelo linear que utiliza regularização para reduzir a influência de coeficientes excessivamente elevados e melhorar a estabilidade das estimativas.
+        - **Regressão Ridge:** regressão linear com regularização L2, que reduz a influência de coeficientes excessivamente elevados e melhora a estabilidade das estimativas.
         - **Random Forest Regressor:** combina diferentes árvores de decisão, permitindo representar relações não lineares entre as variáveis.
-        - **Gradient Boosting Regressor:** constrói modelos sequencialmente, buscando reduzir os erros produzidos nas etapas anteriores.
+        - **Gradient Boosting (HistGradientBoostingRegressor):** constrói árvores sequencialmente, buscando reduzir os erros produzidos nas etapas anteriores.
+
+        Além dos hábitos e da idade, os modelos recebem o **perfil comportamental** do estudante (K-Means com k = 3 sobre os cinco hábitos, sem o GPA). Esse agrupamento é ajustado apenas no conjunto de treino; os estudantes de teste são classificados nos perfis já aprendidos.
 
         ### Treinamento e validação
 
@@ -619,7 +613,9 @@ Os resultados permitem comparar as configurações testadas e examinar as caract
         - **80% para treinamento:** utilizados no ajuste dos modelos.
         - **20% para teste:** reservados para avaliar o desempenho preditivo em observações não utilizadas durante o treinamento.
 
-        A comparação dos algoritmos permite identificar o modelo com melhor desempenho segundo os critérios definidos no motor preditivo.
+        A comparação dos algoritmos permite identificar o modelo com melhor desempenho segundo os critérios definidos no motor preditivo. As métricas também são calculadas no treino: se o resultado do treino for muito melhor que o do teste, há indício de *overfitting*.
+
+        A importância das variáveis é medida por **permutação**: embaralha-se uma variável no conjunto de teste e mede-se quanto o R² cai.
 
         ### Métricas de avaliação
 
@@ -965,21 +961,14 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
     
     # -------------------------------------------------------------------------
     # ATRIBUIÇÃO AUTOMÁTICA DE PERFIL COMPORTAMENTAL PARA A SIMULAÇÃO:
-    # Descobrimos a qual dos 3 perfis comportamentais a nova rotina simulada pertence
+    # A rotina simulada é classificada pelo mesmo K-Means (e mesmo StandardScaler)
+    # ajustado no treino do motor preditivo: vai para o perfil de centroide mais próximo.
     # -------------------------------------------------------------------------
-    perfil_simulado = "Perfil Comportamental A" # Padrão de segurança
     try:
-        # Pega os dados simulados e classifica no cluster comportamental correspondente
-        vetor_habitos = np.array([[estudo, sono, estresse, frequencia, redes]])
-        # Como o pipeline armazena o pré-processador e o modelo, podemos estimar o cluster 
-        # avaliando qual perfil se encaixa melhor, ou definimos uma regra simples baseada nos centroides.
-        # Para simplificar e garantir estabilidade sem quebrar, atribuímos o perfil com base no estresse/estudo:
-        if estresse >= 7.0:
-            perfil_simulado = "Perfil Comportamental C"
-        elif estudo >= 5.0:
-            perfil_simulado = "Perfil Comportamental A"
-        else:
-            perfil_simulado = "Perfil Comportamental B"
+        habitos_simulados = pd.DataFrame([{
+            coluna: values[coluna] for coluna in FEATURES_HABITOS_CLUSTER
+        }])
+        perfil_simulado = atribuir_perfil(motor, habitos_simulados).iloc[0]
     except Exception:
         perfil_simulado = "Perfil Geral"
 
@@ -1025,34 +1014,29 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
                style={"color": "#c084fc", "fontSize": "0.85rem", "marginTop": "4px"})
     ]
 
+    # Importância das variáveis por permutação (calculada no conjunto de teste).
+    # Mede quanto o R² cai quando os valores de uma variável são embaralhados.
     try:
-        modelo = motor["modelo"].named_steps["modelo"]
-        preprocessor = motor["modelo"].named_steps["preprocessamento"]
-        if hasattr(modelo, "feature_importances_"):
-            rotulos_variaveis = {
-                "age": "Idade",
-                "social_media_hours": "Horas diárias em redes sociais",
-                "sleep_hours": "Horas de sono por noite",
-                "mental_stress_level": "Nível de estresse",
-                "study_hours_per_day": "Horas de estudo por dia",
-                "class_attendance_percent": "Frequência às aulas (%)",
-                "cluster_perfil": "Perfil Comportamental"
-            }
-            nomes_variaveis = [
-                rotulos_variaveis.get(nome.split("__")[-1], nome.split("__")[-1])
-                for nome in preprocessor.get_feature_names_out()
-            ]
-            importancia = pd.DataFrame({
-                "Variável": nomes_variaveis,
-                "Importância (%)": modelo.feature_importances_ * 100
-            }).sort_values("Importância (%)", ascending=False).head(8)
-            fig = px.bar(importancia, x="Importância (%)", y="Variável", orientation="h",
-                         labels={
-                             "Importância (%)": "Importância da variável",
-                             "Variável": "Variável"
-                         })
-            estilizar_grafico(fig, "Importância das Variáveis no Modelo Preditivo")
-            children.append(graph(fig))
+        rotulos_variaveis = {
+            "age": "Idade",
+            "social_media_hours": "Horas diárias em redes sociais",
+            "sleep_hours": "Horas de sono por noite",
+            "mental_stress_level": "Nível de estresse",
+            "study_hours_per_day": "Horas de estudo por dia",
+            "class_attendance_percent": "Frequência às aulas (%)",
+            "cluster_perfil": "Perfil Comportamental"
+        }
+        importancia = motor["importancia"].copy()
+        importancia["Variável"] = importancia["Variável"].map(lambda nome: rotulos_variaveis.get(nome, nome))
+        importancia = importancia.sort_values("Queda no R²", ascending=True)
+        fig = px.bar(importancia, x="Queda no R²", y="Variável", orientation="h",
+                     error_x="Desvio",
+                     labels={
+                         "Queda no R²": "Queda no R² ao embaralhar a variável",
+                         "Variável": "Variável"
+                     })
+        estilizar_grafico(fig, f"Importância das Variáveis por Permutação — {motor['nome']}")
+        children.append(graph(fig))
     except Exception:
         pass
 
@@ -1421,8 +1405,9 @@ def layout_perfis_estudantes(
         ),
 
         html.P(
-            "Segmentação dos estudantes com base em hábitos padronizados "
-            "e desempenho acadêmico.",
+            "Segmentação dos estudantes com base em cinco hábitos padronizados "
+            "(estudo, sono, estresse, frequência e redes sociais). O GPA não entra "
+            "no agrupamento: é usado apenas para ordenar e nomear os perfis.",
             style={"color": "#94A3B8"}
         ),
 
@@ -1446,7 +1431,7 @@ def layout_perfis_estudantes(
 
     ])
 
-def layout_avaliacao_kmeans(df_metricas_k):
+def layout_avaliacao_kmeans(df_metricas_k, k_escolhido=None):
     return html.Section([
         html.H2(
             "Avaliação do agrupamento — K-Means",
@@ -1458,6 +1443,8 @@ def layout_avaliacao_kmeans(df_metricas_k):
             "métricas de qualidade e compactação dos agrupamentos.",
             style={"color": "#94A3B8", "marginBottom": "16px"}
         ),
+
+        graph(criar_grafico_cotovelo_silhueta(df_metricas_k, k_escolhido)),
 
         dash_table.DataTable(
             data=df_metricas_k.to_dict("records"),
@@ -1524,7 +1511,7 @@ def layout_avaliacao_motor_preditivo():
         # Métricas do modelo selecionado
         html.Div([
             metric("Modelo Ativo", motor["nome"]),
-            metric("Erro Quadrado (R²)", f"{resultados.iloc[0]['R²']:.3f}"),
+            metric("Coef. de Determinação (R²)", f"{resultados.iloc[0]['R²']:.3f}"),
             metric("Erro Médio (MAE)", f"{resultados.iloc[0]['MAE']:.3f}")
         ], style={**GRID_3, "marginBottom": "24px"}),
 
@@ -1738,7 +1725,7 @@ def renderizar_conteudo_abas(aba_ativa, cursos, anos, generos, idade, trabalho, 
                 # Seção Inferior: Relatório Geral Quantitativo dos diferentes 'k'
                 html.Hr(style={"borderColor": "#334155", "margin": "40px 0"}),
                 
-                layout_avaliacao_kmeans(df_metricas_k),
+                layout_avaliacao_kmeans(df_metricas_k, k_clusters),
 
                 html.Hr(
                     style={
