@@ -1,188 +1,195 @@
-import pandas as pd
 import numpy as np
-from scipy.stats import pearsonr, spearmanr
+import pandas as pd
+from scipy import stats
+from statsmodels.stats.multitest import multipletests
 
 try:
     from data.load import get_Dataset
 except ImportError:
-    from ..data.load import get_Dataset
+    try:
+        from ASTRA_Dashboard.data.load import get_Dataset
+    except ImportError:
+        from ..data.load import get_Dataset
 
 
+# -------------------------------------------------------------------------
+# DEFINIÇÃO DO ESCOPO DE VARIÁVEIS COMPORTAMENTAIS E DE DESEMPENHO
+# -------------------------------------------------------------------------
 HABIT_VARIABLES = [
-    'study_hours_per_day',
-    'class_attendance_percent',
-    'sleep_hours',
-    'screen_time_hours',
-    'social_media_hours',
-    'gaming_hours',
-    'exercise_hours_per_week',
-    'mental_stress_level',
-    'AI_tool_usage_hours',
-    'exam_preparation_days',
-    'coffee_consumption_per_day',
-    'extracurricular_hours_per_week'
+    "study_hours_per_day",
+    "class_attendance_percent",
+    "sleep_hours",
+    "screen_time_hours",
+    "social_media_hours",
+    "gaming_hours",
+    "exercise_hours_per_week",
+    "mental_stress_level",
+    "AI_tool_usage_hours",
+    "exam_preparation_days",
+    "coffee_consumption_per_day",
+    "extracurricular_hours_per_week"
 ]
 
-PERFORMANCE_VARIABLES = ['GPA', 'final_exam_score', 'assignment_score']
+PERFORMANCE_VARIABLES = [
+    "GPA",
+    "final_exam_score",
+    "assignment_score"
+]
 
 HABIT_RELATIONSHIPS = [
-    ('sleep_hours', 'mental_stress_level'),
-    ('exercise_hours_per_week', 'mental_stress_level'),
-    ('screen_time_hours', 'social_media_hours')
+    ("sleep_hours", "mental_stress_level"),
+    ("exercise_hours_per_week", "mental_stress_level"),
+    ("screen_time_hours", "social_media_hours")
 ]
 
 
-def _correlacao_pearson(df, coluna_x, coluna_y):
-    detalhes = _detalhes_correlacao(df, coluna_x, coluna_y)
-    return detalhes['correlacao'], detalhes['pares_validos']
-
-
-def _detalhes_correlacao(df, coluna_x, coluna_y):
-    if coluna_x not in df.columns or coluna_y not in df.columns:
-        return {
-            'correlacao': None,
-            'valor_p': None,
-            'spearman': None,
-            'spearman_valor_p': None,
-            'pares_validos': 0,
-            'sinal': 'indisponível',
-            'intensidade': 'não calculável',
-            'valida': False
-        }
-
-    pares = df[[coluna_x, coluna_y]].apply(pd.to_numeric, errors='coerce')
-    pares = pares.replace([float('inf'), float('-inf')], np.nan).dropna()
-    if len(pares) < 2 or pares[coluna_x].nunique() < 2 or pares[coluna_y].nunique() < 2:
-        return {
-            'correlacao': None,
-            'valor_p': None,
-            'spearman': None,
-            'spearman_valor_p': None,
-            'pares_validos': len(pares),
-            'sinal': 'indisponível',
-            'intensidade': 'não calculável',
-            'valida': False
-        }
-
-    resultado = pearsonr(pares[coluna_x], pares[coluna_y])
-    resultado_spearman = spearmanr(pares[coluna_x], pares[coluna_y])
-    correlacao = float(resultado.statistic)
-    valor_p = float(resultado.pvalue)
-    spearman = float(resultado_spearman.statistic)
-    spearman_valor_p = float(resultado_spearman.pvalue)
-    if not all(np.isfinite(valor) for valor in (correlacao, valor_p, spearman, spearman_valor_p)):
-        return {
-            'correlacao': None,
-            'valor_p': None,
-            'spearman': None,
-            'spearman_valor_p': None,
-            'pares_validos': len(pares),
-            'sinal': 'indisponível',
-            'intensidade': 'não calculável',
-            'valida': False
-        }
-
-    return {
-        'correlacao': correlacao,
-        'valor_p': valor_p,
-        'spearman': spearman,
-        'spearman_valor_p': spearman_valor_p,
-        'pares_validos': len(pares),
-        'sinal': 'positiva' if correlacao > 0 else 'negativa' if correlacao < 0 else 'nula',
-        'intensidade': _classificar_intensidade(correlacao),
-        'valida': True
-    }
-
-
+# -------------------------------------------------------------------------
+# FUNÇÕES AUXILIARES DE CLASSIFICAÇÃO DE MAGNITUDE ESTATÍSTICA
+# -------------------------------------------------------------------------
 def _classificar_intensidade(correlacao):
+    """
+    Classifica qualitativamente a magnitude absoluta do coeficiente de correlação
+    linear segundo faixas convencionais de interpretação estatística.
+    """
     intensidade = abs(correlacao)
     if intensidade < 0.2:
-        return 'muito fraca'
+        return "muito fraca"
     if intensidade < 0.4:
-        return 'fraca'
+        return "fraca"
     if intensidade < 0.6:
-        return 'moderada'
+        return "moderada"
     if intensidade < 0.8:
-        return 'forte'
-    return 'muito forte'
+        return "forte"
+    return "muito forte"
 
 
-def _ajustar_valores_p_fdr(resultados):
-    validos = [resultado for resultado in resultados if resultado['valor_p'] is not None]
-    valores_p = np.array([resultado['valor_p'] for resultado in validos], dtype=float)
-    ordem = np.argsort(valores_p)
-    ajustes = np.empty(len(valores_p), dtype=float)
-    menor_ajuste = 1.0
-    for posicao in range(len(ordem) - 1, -1, -1):
-        indice = ordem[posicao]
-        menor_ajuste = min(menor_ajuste, valores_p[indice] * len(valores_p) / (posicao + 1))
-        ajustes[indice] = menor_ajuste
-    for resultado, ajuste in zip(validos, ajustes):
-        resultado['valor_p_ajustado_fdr'] = float(np.clip(ajuste, 0, 1))
-    for resultado in resultados:
-        resultado.setdefault('valor_p_ajustado_fdr', None)
-    return len(validos)
-
-
-def calcular_correlacoes(df=None, habitos=None, desempenhos=None):
+# -------------------------------------------------------------------------
+# MOTOR DE CORRELAÇÃO BIVARIADA (PEARSON, SPEARMAN E CORREÇÃO FDR)
+# -------------------------------------------------------------------------
+def calcular_correlacoes(df=None, dados=None, habitos=None, desempenhos=None):
+    """
+    Calcula as correlações bivariadas entre variáveis de hábito e indicadores de
+    desempenho acadêmico, combinando:
+    - Coeficiente de Pearson (r): mede a associação linear paramétrica.
+    - Coeficiente de Spearman (rho): mede a associação monotônica baseada em postos,
+      atuando como diagnóstico de robustez frente ao efeito teto do GPA e das provas.
+    - Correção de Benjamini-Hochberg (FDR): controla a Taxa de Falsas Descobertas
+      em testes múltiplos simultâneos na família hábito-desempenho.
+    """
+    if df is None and dados is not None:
+        df = dados
     if df is None:
         df = get_Dataset()
+
     habitos = list(dict.fromkeys(HABIT_VARIABLES if habitos is None else habitos))
     desempenhos = list(dict.fromkeys(PERFORMANCE_VARIABLES if desempenhos is None else desempenhos))
 
-    habit_to_performance = []
-    for habito in habitos:
-        for desempenho in desempenhos:
-            detalhes = _detalhes_correlacao(df, habito, desempenho)
-            habit_to_performance.append({
-                'variavel': habito,
-                'desempenho': desempenho,
-                **detalhes
-            })
+    df_limpo = df.replace([np.inf, -np.inf], np.nan)
+    habito_desempenho = []
+    p_valores_lista = []
+    indices_validos = []
 
-    habit_to_habit = []
-    for variavel_x, variavel_y in HABIT_RELATIONSHIPS:
-        detalhes = _detalhes_correlacao(df, variavel_x, variavel_y)
-        habit_to_habit.append({
-            'variavel_x': variavel_x,
-            'variavel_y': variavel_y,
-            **detalhes
-        })
+    # ---------------------------------------------------------------------
+    # ETAPA 1: CÁLCULO PAR A PAR (PEARSON r + SPEARMAN rho)
+    # ---------------------------------------------------------------------
+    # Avalia simultaneamente a relação linear (Pearson) e por postos (Spearman)
+    # para diagnosticar distorções de não linearidade ou saturação (efeito teto).
+    for h in habitos:
+        for d in desempenhos:
+            item = {
+                "variavel": h,
+                "desempenho": d,
+                "correlacao": None,
+                "spearman": None,
+                "spearman_valor_p": None,
+                "valor_p": None,
+                "valor_p_ajustado_fdr": None,
+                "pares_validos": 0,
+                "sinal": "indisponível",
+                "intensidade": "não calculável",
+                "valida": False,
+            }
 
-    comparacoes_habito_desempenho = _ajustar_valores_p_fdr(habit_to_performance)
-    comparacoes_habito_habito = _ajustar_valores_p_fdr(habit_to_habit)
+            if h in df_limpo.columns and d in df_limpo.columns:
+                sub = (
+                    df_limpo[[h, d]]
+                    .apply(pd.to_numeric, errors="coerce")
+                    .replace([np.inf, -np.inf], np.nan)
+                    .dropna()
+                )
+                item["pares_validos"] = int(len(sub))
+
+                if len(sub) >= 2:
+                    x = sub[h].to_numpy(dtype=float)
+                    y = sub[d].to_numpy(dtype=float)
+
+                    # Verifica variância não nula em ambos os vetores antes da inferência
+                    if not (np.all(x == x[0]) or np.all(y == y[0])):
+                        r, p = stats.pearsonr(x, y)
+                        rho, p_rho = stats.spearmanr(x, y)
+
+                        if all(np.isfinite(val) for val in (r, p, rho)):
+                            r_float = float(r)
+                            p_float = float(p)
+                            rho_float = float(rho)
+
+                            item["correlacao"] = r_float
+                            item["spearman"] = rho_float
+                            item["spearman_valor_p"] = float(p_rho) if np.isfinite(p_rho) else None
+                            item["valor_p"] = p_float
+                            item["sinal"] = (
+                                "positiva" if r_float > 0
+                                else "negativa" if r_float < 0
+                                else "nula"
+                            )
+                            item["intensidade"] = _classificar_intensidade(r_float)
+                            item["valida"] = True
+
+                            p_valores_lista.append(p_float)
+                            indices_validos.append(len(habito_desempenho))
+
+            habito_desempenho.append(item)
+
+    # ---------------------------------------------------------------------
+    # ETAPA 2: CONTROLE DA TAXA DE FALSAS DESCOBERTAS (BENJAMINI-HOCHBERG)
+    # ---------------------------------------------------------------------
+    # Ajusta os p-valores brutos pelo procedimento step-up de Benjamini-Hochberg (fdr_bh)
+    # para mitigar a inflação do Erro Tipo I decorrente de múltiplas comparações.
+    if p_valores_lista:
+        _, p_adj, _, _ = multipletests(p_valores_lista, method="fdr_bh")
+        for idx_item, valor_fdr in zip(indices_validos, p_adj):
+            habito_desempenho[idx_item]["valor_p_ajustado_fdr"] = float(valor_fdr)
 
     return {
-        'habito_desempenho': habit_to_performance,
-        'habito_habito': habit_to_habit,
-        'habitos_disponiveis': [coluna for coluna in habitos if coluna in df.columns],
-        'desempenhos_disponiveis': [coluna for coluna in desempenhos if coluna in df.columns],
-        'combinacoes_esperadas': len(habitos) * len(desempenhos),
-        'comparacoes_validas': comparacoes_habito_desempenho + comparacoes_habito_habito,
-        'comparacoes_validas_por_familia': {
-            'habito_desempenho': comparacoes_habito_desempenho,
-            'habito_habito': comparacoes_habito_habito
-        },
-        'ajuste_valores_p': 'Benjamini-Hochberg (FDR), aplicado separadamente por família'
+        "habito_desempenho": habito_desempenho,
+        "combinacoes_esperadas": len(habitos) * len(desempenhos),
+        "habitos_disponiveis": [c for c in habitos if c in df_limpo.columns],
+        "desempenhos_disponiveis": [c for c in desempenhos if c in df_limpo.columns],
+        "comparacoes_validas": len(indices_validos),
+        "ajuste_valores_p": "Benjamini-Hochberg (FDR)",
     }
 
 
-def calcular_matriz_correlacoes(df=None, habitos=None, desempenhos=None):
+# -------------------------------------------------------------------------
+# GERAÇÃO DA MATRIZ DE CORRELAÇÃO DE PEARSON PARA O HEATMAP
+# -------------------------------------------------------------------------
+def calcular_matriz_correlacoes(df=None, dados=None, habitos=None, desempenhos=None):
+    """
+    Constrói a matriz simétrica de correlação linear de Pearson entre variáveis de
+    hábito e desempenho acadêmico, tratando valores infinitos e não numéricos.
+    """
+    if df is None and dados is not None:
+        df = dados
     if df is None:
         df = get_Dataset()
 
     habitos = list(dict.fromkeys(HABIT_VARIABLES if habitos is None else habitos))
     desempenhos = list(dict.fromkeys(PERFORMANCE_VARIABLES if desempenhos is None else desempenhos))
 
-    variaveis = [
-        coluna
-        for coluna in habitos + desempenhos
-        if coluna in df.columns
-    ]
-
+    colunas = [c for c in habitos + desempenhos if c in df.columns]
     return (
-        df[variaveis]
+        df[colunas]
         .apply(pd.to_numeric, errors="coerce")
-        .replace([float("inf"), float("-inf")], float("nan"))
+        .replace([np.inf, -np.inf], np.nan)
         .corr(method="pearson")
     )

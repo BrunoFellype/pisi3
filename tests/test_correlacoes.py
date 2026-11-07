@@ -16,6 +16,30 @@ def _dados_completos():
     return pd.DataFrame(valores)
 
 
+def test_calculo_correlacoes_estrutura():
+    df_dummy = pd.DataFrame({
+        "study_hours_per_day": [1.0, 2.0, 3.0, 4.0, 5.0],
+        "class_attendance_percent": [60, 70, 80, 90, 100],
+        "GPA": [2.0, 2.5, 3.0, 3.5, 4.0],
+        "final_exam_score": [50, 60, 70, 80, 90]
+    })
+
+    res = calcular_correlacoes(df_dummy, habitos=["study_hours_per_day"], desempenhos=["GPA"])
+    assert "habito_desempenho" in res
+    assert len(res["habito_desempenho"]) == 1
+    assert res["habito_desempenho"][0]["correlacao"] == pytest.approx(1.0, 0.01)
+
+
+def test_matriz_correlacao():
+    df_dummy = pd.DataFrame({
+        "study_hours_per_day": [1.0, 2.0, 3.0],
+        "GPA": [2.0, 3.0, 4.0]
+    })
+    matriz = calcular_matriz_correlacoes(df_dummy, habitos=["study_hours_per_day"], desempenhos=["GPA"])
+    assert matriz.shape == (2, 2)
+    assert matriz.loc["study_hours_per_day", "GPA"] == pytest.approx(1.0, 0.01)
+
+
 def test_processa_as_36_combinacoes_sem_duplicidade():
     resultado = calcular_correlacoes(_dados_completos())
     combinacoes = [
