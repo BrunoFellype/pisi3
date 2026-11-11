@@ -935,25 +935,11 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
         "social_media_hours": redes,
         "age": idade
     }
-    
-    # ---------------------------------------------------------------------
-    # HEURÍSTICA DE ATRIBUIÇÃO AUTOMÁTICA DE PERFIL COMPORTAMENTAL
-    # ---------------------------------------------------------------------
-    # Infere dinamicamente a categoria comportamental do estudante simulado a partir
-    # dos limiares críticos de estresse (>= 7.0 -> Perfil C) e carga de estudo
-    # (>= 5.0h -> Perfil A; caso contrário -> Perfil B), alimentando o OneHotEncoder.
-    perfil_simulado = "Perfil Comportamental A"
-    try:
-        if estresse >= 7.0:
-            perfil_simulado = "Perfil Comportamental C"
-        elif estudo >= 5.0:
-            perfil_simulado = "Perfil Comportamental A"
-        else:
-            perfil_simulado = "Perfil Comportamental B"
+
     # -------------------------------------------------------------------------
     # ATRIBUIÇÃO AUTOMÁTICA DE PERFIL COMPORTAMENTAL PARA A SIMULAÇÃO:
-    # A rotina simulada é classificada pelo mesmo K-Means (e mesmo StandardScaler)
-    # ajustado no treino do motor preditivo: vai para o perfil de centroide mais próximo.
+    # 1ª Tentativa: Usa o K-Means real ajustado no motor preditivo.
+    # 2ª Tentativa (Fallback): Se o modelo falhar, usa a heurística de limiares.
     # -------------------------------------------------------------------------
     try:
         habitos_simulados = pd.DataFrame([{
@@ -961,7 +947,13 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
         }])
         perfil_simulado = atribuir_perfil(motor, habitos_simulados).iloc[0]
     except Exception:
-        perfil_simulado = "Perfil Geral"
+        # Fallback heurístico caso o K-Means/atribuir_perfil apresente algum erro
+        if estresse >= 7.0:
+            perfil_simulado = "Perfil Comportamental C"
+        elif estudo >= 5.0:
+            perfil_simulado = "Perfil Comportamental A"
+        else:
+            perfil_simulado = "Perfil Comportamental B"
 
     values["cluster_perfil"] = perfil_simulado
 
