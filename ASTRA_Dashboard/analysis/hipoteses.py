@@ -14,13 +14,23 @@ except ImportError:
         from ..data.load import get_Dataset
 
 
+# -------------------------------------------------------------------------
+# CONSTANTES DE INFERÊNCIA ESTATÍSTICA E VARIÁVEIS DE INTERESSE
+# -------------------------------------------------------------------------
 NIVEL_SIGNIFICANCIA = 0.05
 GPA_COLUMN = 'GPA'
 NOTE_TAKING_METHOD_COLUMN = 'note_taking_method'
 MAJOR_COLUMN = 'major'
 
 
+# -------------------------------------------------------------------------
+# ESTRUTURAS BASE E FORMATAÇÃO DE CONCLUSÃO ESTATÍSTICA
+# -------------------------------------------------------------------------
 def _resultado_base(agrupamento, variavel=GPA_COLUMN, grupos=None, tamanhos=None, quantidade=0):
+    """
+    Inicializa o dicionário padronizado de metadados e diagnósticos para testes
+    de hipóteses entre múltiplos grupos independentes.
+    """
     return {
         'variavel_agrupamento': agrupamento,
         'variavel_analisada': variavel,
@@ -38,12 +48,22 @@ def _resultado_base(agrupamento, variavel=GPA_COLUMN, grupos=None, tamanhos=None
 
 
 def _conclusao(p_valor):
+    """
+    Interpreta formalmente o valor-p frente ao nível de significância alfa = 5%.
+    """
     if p_valor < NIVEL_SIGNIFICANCIA:
         return 'Rejeita-se a hipótese nula: há diferença estatisticamente significativa entre pelo menos dois grupos.'
     return 'Não se rejeita a hipótese nula: não foi identificada diferença estatisticamente significativa entre os grupos.'
 
 
+# -------------------------------------------------------------------------
+# PREPARAÇÃO, SANEAMENTO E PARTIÇÃO AMOSTRAL POR GRUPO
+# -------------------------------------------------------------------------
 def _dados_para_teste(df, agrupamento, variavel=GPA_COLUMN):
+    """
+    Filtra observações válidas, converte a variável dependente para formato numérico
+    e particiona os dados nos subgrupos definidos pela variável de agrupamento.
+    """
     if df is None:
         df = get_Dataset()
 
@@ -80,7 +100,17 @@ def _dados_para_teste(df, agrupamento, variavel=GPA_COLUMN):
     return resultado, amostras
 
 
+# -------------------------------------------------------------------------
+# SELEÇÃO ADAPTATIVA DE TESTE (SHAPIRO-WILK + LEVENE -> ANOVA / KRUSKAL-WALLIS)
+# -------------------------------------------------------------------------
 def _executar_teste(df, agrupamento, variavel=GPA_COLUMN):
+    """
+    Executa a verificação automática dos pressupostos paramétricos:
+    1. Normalidade intra-grupo via teste de Shapiro-Wilk.
+    2. Homocedasticidade (homogeneidade de variâncias) via teste de Levene centrado na mediana.
+    Seleciona ANOVA One-Way quando ambos os pressupostos são atendidos, ou recorre
+    ao teste não paramétrico de Kruskal-Wallis caso haja violação (ex.: efeito teto).
+    """
     resultado, amostras = _dados_para_teste(df, agrupamento, variavel)
     if amostras is None:
         return resultado
@@ -97,6 +127,7 @@ def _executar_teste(df, agrupamento, variavel=GPA_COLUMN):
         resultado['conclusao_estatistica'] = 'Dados insuficientes: cada grupo precisa conter pelo menos dois registros válidos.'
         return resultado
 
+    # Verificação de normalidade por subgrupo (Shapiro-Wilk requer n >= 3)
     normalidade = {}
     normalidade_verificavel = True
     for grupo, amostra in amostras.items():
@@ -109,6 +140,7 @@ def _executar_teste(df, agrupamento, variavel=GPA_COLUMN):
         if normalidade[grupo] is None or normalidade[grupo] <= NIVEL_SIGNIFICANCIA:
             normalidade_verificavel = False
 
+    # Verificação de homogeneidade de variâncias (Brown-Forsythe / Levene pela mediana)
     _, p_levene = stats.levene(*amostras.values(), center='median')
     variancias_homogeneas = not pd.isna(p_levene) and p_levene > NIVEL_SIGNIFICANCIA
     resultado['diagnosticos'] = {
@@ -118,6 +150,7 @@ def _executar_teste(df, agrupamento, variavel=GPA_COLUMN):
         'homogeneidade_variancias_atendida': variancias_homogeneas
     }
 
+    # Decisão entre teste paramétrico (ANOVA F) e não paramétrico por postos (Kruskal-Wallis H)
     if normalidade_verificavel and variancias_homogeneas:
         teste = stats.f_oneway(*amostras.values())
         nome_teste = 'ANOVA'
@@ -138,7 +171,16 @@ def _executar_teste(df, agrupamento, variavel=GPA_COLUMN):
     return resultado
 
 
+# -------------------------------------------------------------------------
+# COMPARAÇÃO DE DESEMPENHO ACADÊMICO ENTRE CLUSTERS COMPORTAMENTAIS
+# -------------------------------------------------------------------------
 def comparar_desempenho_por_cluster(df=None, cluster_labels=None, cluster_coluna='cluster_id', variaveis_desempenho=None):
+    """
+    Consolida estatísticas descritivas (tamanho amostral, média e mediana) e executa
+    testes de significância global (ANOVA ou Kruskal-Wallis) para validar se os perfis
+    comportamentais encontrados pelo K-Means apresentam diferenças reais nas métricas
+    de desempenho acadêmico (GPA, nota do exame final e nota de atividades).
+    """
     if df is None:
         df = get_Dataset()
 
@@ -156,12 +198,14 @@ def comparar_desempenho_por_cluster(df=None, cluster_labels=None, cluster_coluna
     if not variaveis:
         return {'tabela': pd.DataFrame(columns=[cluster_coluna, 'n']), 'teste_por_variavel': {}}
 
+    # Agregação descritiva por cluster (média paramétrica e mediana robusta ao efeito teto)
     tabela = dados.groupby(cluster_coluna, dropna=False).agg(
         n=(cluster_coluna, 'size'),
         **{f'{variavel}_media': (variavel, 'mean') for variavel in variaveis},
         **{f'{variavel}_mediana': (variavel, 'median') for variavel in variaveis}
     ).reset_index()
 
+    # Execução do teste de hipóteses para cada indicador de desempenho acadêmico
     testes = {}
     for variavel in variaveis:
         teste = _executar_teste(dados, cluster_coluna, variavel=variavel)
@@ -186,8 +230,10 @@ def comparar_desempenho_por_cluster(df=None, cluster_labels=None, cluster_coluna
 
 
 def testar_metodo_anotacao_gpa(df=None):
+    """Testa diferenças de GPA entre métodos de anotação em sala de aula."""
     return _executar_teste(df, NOTE_TAKING_METHOD_COLUMN)
 
 
 def testar_curso_gpa(df=None):
+    """Testa diferenças de GPA entre os diferentes cursos de graduação (majors)."""
     return _executar_teste(df, MAJOR_COLUMN)

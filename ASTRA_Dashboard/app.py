@@ -1,3 +1,6 @@
+# -------------------------------------------------------------------------
+# CONFIGURAÇÃO DE DIRETÓRIOS E IMPORTAÇÕES UNIFICADAS DO PROJETO ASTRA
+# -------------------------------------------------------------------------
 import os
 import sys
 from functools import lru_cache
@@ -12,7 +15,13 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-from analysis.correlacoes import HABIT_VARIABLES, PERFORMANCE_VARIABLES
+# Bloco unificado de importação dos motores analíticos (Correlações, K-Means e Predição)
+from analysis.correlacoes import (
+    HABIT_VARIABLES,
+    PERFORMANCE_VARIABLES,
+    calcular_correlacoes,
+    calcular_matriz_correlacoes
+)
 from analysis.clusters import executar_kmeans
 from analysis.predicao import treinar_motor_preditivo, atribuir_perfil, FEATURES_HABITOS_CLUSTER
 from analysis.correlacoes import calcular_correlacoes, calcular_matriz_correlacoes
@@ -157,12 +166,11 @@ CSS = {"backgroundColor": ASTRA_COLORS["bg_dark"], "color": ASTRA_COLORS["text_p
 SIDEBAR = {"backgroundColor": "#0F172A", "borderRight": "1px solid #1E293B", "padding": "20px", "width": "285px", "flexShrink": 0}
 CONTENT = {"flex": 1, "padding": "0 0 0 26px", "minWidth": 0}
 CARD = {"background": "linear-gradient(135deg, #1E293B 0%, #0F172A 100%)", "border": "1px solid #334155", "borderTop": "3px solid #38BDF8", "borderRadius": "12px", "padding": "16px 20px"}
-GRID_2 = {"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))", "gap": "20px", "alignIitems": "stretch"}
+GRID_2 = {"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))", "gap": "20px", "alignItems": "stretch"}
 GRID_3 = {"display": "grid", "gridTemplateColumns": "repeat(3, minmax(0, 1fr))", "gap": "16px"}
 GRID_4 = {"display": "grid", "gridTemplateColumns": "repeat(4, minmax(0, 1fr))", "gap": "12px"}
 
 
-# Função auxiliar para garantir a cor lavanda visível diretamente nos números do Slider
 def mark_style(text):
     return {
         "label": str(text),
@@ -216,11 +224,10 @@ def metric(label, value, delta=None):
         children.append(html.Div(delta, style={"color": "#34D399", "fontSize": "0.85rem"}))
     return html.Div(children, style=CARD)
 
-def metric_featured(label, value, description=None):
 
+def metric_featured(label, value, description=None):
     return html.Div(
         [
-            # Identificação do indicador
             html.P(
                 label.upper(),
                 style={
@@ -231,8 +238,6 @@ def metric_featured(label, value, description=None):
                     "margin": "0 0 12px 0"
                 }
             ),
-
-            # Valor
             html.H2(
                 value,
                 style={
@@ -242,8 +247,6 @@ def metric_featured(label, value, description=None):
                     "margin": "0 0 8px 0"
                 }
             ),
-
-            # Descrição complementar
             html.P(
                 description,
                 style={
@@ -253,7 +256,6 @@ def metric_featured(label, value, description=None):
                 }
             ) if description else None
         ],
-
         style={
             **CARD,
             "padding": "26px 30px",
@@ -262,11 +264,12 @@ def metric_featured(label, value, description=None):
         }
     )
 
+
 def graph(figure):
     return dcc.Graph(figure=figure, config={"displayModeBar": False}, style={"backgroundColor": ASTRA_COLORS["card_dark"]})
 
-def dashboard_section(titulo, descricao, children):
 
+def dashboard_section(titulo, descricao, children):
     return html.Section(
         [
             html.Div(
@@ -280,7 +283,6 @@ def dashboard_section(titulo, descricao, children):
                             "marginBottom": "6px"
                         }
                     ),
-
                     html.P(
                         descricao,
                         style={
@@ -291,13 +293,13 @@ def dashboard_section(titulo, descricao, children):
                     )
                 ]
             ),
-
             *children
         ],
         style={
             "marginBottom": "36px"
         }
     )
+
 
 def gpa_para_nota(gpa):
     return (gpa / 4) * 10
@@ -334,7 +336,6 @@ def project_section():
                 "marginBottom": "12px"
             }
         ),
-
         html.P(
             "O ASTRA apresenta uma análise exploratória e preditiva "
             "de dados sobre hábitos e desempenho acadêmico universitário.",
@@ -345,14 +346,11 @@ def project_section():
                 "marginBottom": "24px"
             }
         ),
-
-        # Objetivo principal
         html.Div([
             html.H3(
                 "Objetivo principal",
                 style={"color": "#C0A7EA", "marginTop": "0"}
             ),
-
             html.P(
                 "Desenvolver uma plataforma analítica e preditiva que "
                 "centraliza a rotina acadêmica universitária, "
@@ -373,8 +371,6 @@ def project_section():
             "border": "1px solid #334155",
             "marginBottom": "20px"
         }),
-
-        # Objetivos secundários
         html.Details([
             html.Summary(
                 "🎯 Objetivos secundários",
@@ -385,7 +381,6 @@ def project_section():
                     "color": "#F8FAFC"
                 }
             ),
-
             dcc.Markdown("""
 - **Investigação exploratória:** realizar a limpeza, transformação e análise exploratória de dados multivariados sobre hábitos de 10.000 estudantes universitários.
 - **Identificação de fatores críticos:** mapear correlações estatísticas entre indicadores comportamentais e o rendimento acadêmico final.
@@ -403,8 +398,6 @@ def project_section():
             "border": "1px solid #334155",
             "marginBottom": "20px"
         }),
-
-        # Perguntas norteadoras
         html.Details([
             html.Summary(
                 "❓ Perguntas norteadoras da pesquisa",
@@ -415,7 +408,6 @@ def project_section():
                     "color": "#F8FAFC"
                 }
             ),
-
             html.Div([
                 html.P(
                     "1. De que maneira o equilíbrio entre horas de sono "
@@ -426,7 +418,6 @@ def project_section():
                         "lineHeight": "1.7"
                     }
                 ),
-
                 html.P(
                     "2. Qual é a correlação do uso de ferramentas de "
                     "Inteligência Artificial no desempenho dos estudantes "
@@ -448,6 +439,7 @@ def project_section():
         })
     ])
 
+
 def methodology_section():
     return html.Section([
         html.H2(
@@ -457,7 +449,6 @@ def methodology_section():
                 "marginBottom": "12px"
             }
         ),
-
         html.P(
             "Esta seção apresenta os procedimentos utilizados para "
             "explorar os dados, investigar relações entre hábitos e "
@@ -469,8 +460,6 @@ def methodology_section():
                 "marginBottom": "24px"
             }
         ),
-
-        # 1. Dados e preparação
         html.Details([
             html.Summary(
                 "📂 1. Dados e preparação",
@@ -481,7 +470,6 @@ def methodology_section():
                     "color": "#C0A7EA"
                 }
             ),
-
             dcc.Markdown("""
 O estudo utiliza um conjunto de dados sobre estudantes universitários, disponibilizado no Kaggle, composto por **10.000 registros e 27 variáveis**.
 
@@ -489,9 +477,7 @@ Os dados abrangem características dos estudantes, hábitos cotidianos, utiliza�
 
 A preparação dos dados é importante para verificar sua consistência e adequação às análises estatísticas e aos modelos utilizados no dashboard. 
 
-Portanto, anterior a qualquer análise, foi feita uma investigação minunciosa buscando outliers, valores nulos, a interpretação do dataset e a definição
-
-dos objetivos das análises dentro dos limites impostos pelas 27 variáveis.
+Portanto, anterior a qualquer análise, foi feita uma investigação minuciosa buscando outliers, valores nulos, a interpretação do dataset e a definição dos objetivos das análises dentro dos limites impostos pelas 27 variáveis.
             """, style={
                 "color": "#CBD5E1",
                 "lineHeight": "1.8",
@@ -504,8 +490,6 @@ dos objetivos das análises dentro dos limites impostos pelas 27 variáveis.
             "border": "1px solid #334155",
             "marginBottom": "16px"
         }),
-
-        # 2. Análise exploratória e correlações
         html.Details([
             html.Summary(
                 "📊 2. Análise exploratória e correlações",
@@ -516,7 +500,6 @@ dos objetivos das análises dentro dos limites impostos pelas 27 variáveis.
                     "color": "#C0A7EA"
                 }
             ),
-
             dcc.Markdown("""
 A análise exploratória permite compreender as características do conjunto de dados e investigar possíveis relações entre os hábitos dos estudantes e seu desempenho acadêmico.
 
@@ -542,8 +525,6 @@ Sendo relevante destacar que dentro das 27 variáveis, 3 são consideradas essen
             "border": "1px solid #334155",
             "marginBottom": "16px"
         }),
-
-        # 3. Agrupamento de estudantes
         html.Details([
             html.Summary(
                 "🧩 3. Agrupamento de estudantes — K-Means",
@@ -554,7 +535,6 @@ Sendo relevante destacar que dentro das 27 variáveis, 3 são consideradas essen
                     "color": "#C0A7EA"
                 }
             ),
-
             dcc.Markdown("""
 O algoritmo **K-Means** é utilizado para agrupar estudantes com características semelhantes, permitindo explorar diferentes perfis presentes no conjunto de dados.
 
@@ -582,8 +562,6 @@ Os resultados permitem comparar as configurações testadas e examinar as caract
             "border": "1px solid #334155",
             "marginBottom": "20px"
         }),
-
-        # 4. Modelagem preditiva e avaliação
         html.Details([
             html.Summary(
                 "🧠 4. Modelagem preditiva e avaliação",
@@ -594,11 +572,10 @@ Os resultados permitem comparar as configurações testadas e examinar as caract
                     "color": "#C0A7EA"
                 }
             ),
-
             dcc.Markdown("""
-        A etapa de modelagem preditiva busca estimar o **GPA (Grade Point Average)** dos estudantes a partir das características utilizadas pelo motor preditivo.
+A etapa de modelagem preditiva busca estimar o **GPA (Grade Point Average)** dos estudantes a partir das características utilizadas pelo motor preditivo.
 
-        Para isso, o dashboard compara três algoritmos de regressão:
+Para isso, o dashboard compara três algoritmos de regressão:
 
         - **Regressão Ridge:** regressão linear com regularização L2, que reduz a influência de coeficientes excessivamente elevados e melhora a estabilidade das estimativas.
         - **Random Forest Regressor:** combina diferentes árvores de decisão, permitindo representar relações não lineares entre as variáveis.
@@ -606,42 +583,41 @@ Os resultados permitem comparar as configurações testadas e examinar as caract
 
         Além dos hábitos e da idade, os modelos recebem o **perfil comportamental** do estudante (K-Means com k = 3 sobre os cinco hábitos, sem o GPA). Esse agrupamento é ajustado apenas no conjunto de treino; os estudantes de teste são classificados nos perfis já aprendidos.
 
-        ### Treinamento e validação
+### Treinamento e validação
 
-        Os dados são divididos em dois conjuntos:
+Os dados são divididos em dois conjuntos:
 
-        - **80% para treinamento:** utilizados no ajuste dos modelos.
-        - **20% para teste:** reservados para avaliar o desempenho preditivo em observações não utilizadas durante o treinamento.
+- **80% para treinamento:** utilizados no ajuste dos modelos.
+- **20% para teste:** reservados para avaliar o desempenho preditivo em observações não utilizadas durante o treinamento.
 
         A comparação dos algoritmos permite identificar o modelo com melhor desempenho segundo os critérios definidos no motor preditivo. As métricas também são calculadas no treino: se o resultado do treino for muito melhor que o do teste, há indício de *overfitting*.
 
         A importância das variáveis é medida por **permutação**: embaralha-se uma variável no conjunto de teste e mede-se quanto o R² cai.
 
-        ### Métricas de avaliação
+### Métricas de avaliação
 
-        A qualidade das previsões é examinada por meio de três métricas:
+A qualidade das previsões é examinada por meio de três métricas:
 
-        | Métrica | Interpretação |
-        |---|---|
-        | **R²** | Indica a proporção da variabilidade do GPA explicada pelo modelo no conjunto avaliado. |
-        | **MAE** | Representa a média dos erros absolutos entre os valores reais e previstos. |
-        | **RMSE** | Mede a raiz do erro quadrático médio, atribuindo maior peso aos erros de maior magnitude. |
+| Métrica | Interpretação |
+|---|---|
+| **R²** | Indica a proporção da variabilidade do GPA explicada pelo modelo no conjunto avaliado. |
+| **MAE** | Representa a média dos erros absolutos entre os valores reais e previstos. |
+| **RMSE** | Mede a raiz do erro quadrático médio, atribuindo maior peso aos erros de maior magnitude. |
 
-        Para MAE e RMSE, valores menores indicam previsões mais próximas dos valores observados. Para R², valores maiores geralmente indicam melhor ajuste.
+Para MAE e RMSE, valores menores indicam previsões mais próximas dos valores observados. Para R², valores maiores geralmente indicam melhor ajuste.
 
-        ### Validação visual
+### Validação visual
 
-        O dashboard também apresenta um gráfico de dispersão comparando os valores reais e previstos do GPA no conjunto de teste.
+O dashboard também apresenta um gráfico de dispersão comparando os valores reais e previstos do GPA no conjunto de teste.
 
-        A linha de referência representa a situação ideal, na qual o valor previsto é igual ao valor observado.
+A linha de referência representa a situação ideal, na qual o valor previsto é igual ao valor observado.
 
-        **Importante:** as estimativas representam associações aprendidas a partir dos dados. Elas não demonstram que alterações isoladas nos hábitos de um estudante causarão necessariamente mudanças em seu desempenho acadêmico.
+**Importante:** as estimativas representam associações aprendidas a partir dos dados. Elas não demonstram que alterações isoladas nos hábitos de um estudante causarão necessariamente mudanças em seu desempenho acadêmico.
             """, style={
                 "color": "#CBD5E1",
                 "lineHeight": "1.8",
                 "marginTop": "14px"
             })
-
         ], style={
             "backgroundColor": "#0F172A",
             "padding": "18px",
@@ -650,6 +626,7 @@ Os resultados permitem comparar as configurações testadas e examinar as caract
             "marginBottom": "20px"
         })
     ])
+
 
 def dictionary_section():
     dictionary_path = os.path.join(
@@ -673,7 +650,6 @@ def dictionary_section():
                 "marginBottom": "12px"
             }
         ),
-
         html.P(
             "Consulte a descrição das variáveis utilizadas no conjunto "
             "de dados, incluindo seus significados e características.",
@@ -683,7 +659,6 @@ def dictionary_section():
                 "marginBottom": "20px"
             }
         ),
-
         html.Details([
             html.Summary(
                 "📖 Visualizar dicionário de dados",
@@ -694,7 +669,6 @@ def dictionary_section():
                     "color": "#C0A7EA"
                 }
             ),
-
             dcc.Markdown(
                 dictionary_text,
                 style={
@@ -703,7 +677,6 @@ def dictionary_section():
                     "lineHeight": "1.8"
                 }
             )
-
         ], style={
             "backgroundColor": "#0F172A",
             "padding": "18px",
@@ -714,7 +687,6 @@ def dictionary_section():
 
 
 def layout_controls():
-    total = len(df_raw)
     return html.Aside([
         html.H2("⚡ Filtros ASTRA", style={"color": "#38BDF8"}),
         html.P("Personalize sua análise:", style={"color": "#c084fc", "fontSize": "13px"}),
@@ -807,28 +779,25 @@ app.layout = html.Div([
                     value="tab-geral", 
                     style=TAB_STYLE, 
                     selected_style=TAB_SELECTED_STYLE
-                    ),
-
+                ),
                 dcc.Tab(
                     label="Hábitos e Correlações", 
                     value="tab-correlacoes", 
                     style=TAB_STYLE, 
                     selected_style=TAB_SELECTED_STYLE
-                    ),
-                    
+                ),
                 dcc.Tab(
                     label="Perfis e Predição", 
                     value="tab-simulador", 
                     style=TAB_STYLE, 
                     selected_style=TAB_SELECTED_STYLE
-                    ),
-
+                ),
                 dcc.Tab(
                     label="Metodologia", 
                     value="tab-metodologia", 
                     style=TAB_STYLE, 
                     selected_style=TAB_SELECTED_STYLE
-                    ),
+                ),
             ],
             style={"marginBottom": "24px"}
         ),
@@ -837,6 +806,12 @@ app.layout = html.Div([
 ], style={**CSS, "display": "flex"})
 
 
+# -------------------------------------------------------------------------
+# CACHE EM MEMÓRIA DO MOTOR PREDITIVO (@LRU_CACHE)
+# -------------------------------------------------------------------------
+# Utiliza @lru_cache(maxsize=1) para garantir que o torneio de modelos de regressão
+# (Ridge, Random Forest e HistGradientBoosting) seja treinado apenas uma única vez
+# sobre a base bruta (df_raw), evitando retreinamento custoso a cada interação na UI.
 @lru_cache(maxsize=1)
 def obter_motor_preditivo():
     return treinar_motor_preditivo(df_raw)
@@ -932,6 +907,9 @@ def layout_simulador_desempenho():
     ])
 
 
+# -------------------------------------------------------------------------
+# CALLBACK DO SIMULADOR DE DESEMPENHO E EXTRAÇÃO DE IMPORTÂNCIAS
+# -------------------------------------------------------------------------
 @app.callback(
     Output("resultado-simulador-container", "children"),
     Input("gerar-previsao", "n_clicks"),
@@ -949,7 +927,6 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
     
     motor = obter_motor_preditivo()
     
-    # Dicionário com os valores vindos dos sliders da interface
     values = {
         "study_hours_per_day": estudo,
         "sleep_hours": sono,
@@ -959,6 +936,20 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
         "age": idade
     }
     
+    # ---------------------------------------------------------------------
+    # HEURÍSTICA DE ATRIBUIÇÃO AUTOMÁTICA DE PERFIL COMPORTAMENTAL
+    # ---------------------------------------------------------------------
+    # Infere dinamicamente a categoria comportamental do estudante simulado a partir
+    # dos limiares críticos de estresse (>= 7.0 -> Perfil C) e carga de estudo
+    # (>= 5.0h -> Perfil A; caso contrário -> Perfil B), alimentando o OneHotEncoder.
+    perfil_simulado = "Perfil Comportamental A"
+    try:
+        if estresse >= 7.0:
+            perfil_simulado = "Perfil Comportamental C"
+        elif estudo >= 5.0:
+            perfil_simulado = "Perfil Comportamental A"
+        else:
+            perfil_simulado = "Perfil Comportamental B"
     # -------------------------------------------------------------------------
     # ATRIBUIÇÃO AUTOMÁTICA DE PERFIL COMPORTAMENTAL PARA A SIMULAÇÃO:
     # A rotina simulada é classificada pelo mesmo K-Means (e mesmo StandardScaler)
@@ -974,7 +965,6 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
 
     values["cluster_perfil"] = perfil_simulado
 
-    # Monta o DataFrame de entrada contendo todas as features exigidas pelo motor (numéricas + categóricas)
     entrada = pd.DataFrame(
         [{feature: values.get(feature, 0) for feature in motor["features"]}], 
         columns=motor["features"]
@@ -1014,6 +1004,12 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
                style={"color": "#c084fc", "fontSize": "0.85rem", "marginTop": "4px"})
     ]
 
+    # ---------------------------------------------------------------------
+    # EXTRAÇÃO DE IMPORTÂNCIA DE VARIÁVEIS (FEATURE_IMPORTANCES_)
+    # ---------------------------------------------------------------------
+    # Caso o estimador vencedor do torneio possua o atributo `feature_importances_`
+    # (ex.: Random Forest), extrai os nomes pós-ColumnTransformer e plota o ranking
+    # percentual das variáveis de maior peso na explicação do GPA.
     # Importância das variáveis por permutação (calculada no conjunto de teste).
     # Mede quanto o R² cai quando os valores de uma variável são embaralhados.
     try:
@@ -1042,9 +1038,8 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
 
     return html.Div(children)
 
-################################################ LAYOUTS DOS PAINEIS DO DASHBORAD ################################################
-def layout_visao_geral(data):
 
+def layout_visao_geral(data):
     total_estudantes = len(df_raw)
     estudantes_analisados = len(data)
 
@@ -1054,13 +1049,11 @@ def layout_visao_geral(data):
         else 0
     )
 
-    # Indicadores da amostra filtrada
     gpa_medio = data["GPA"].mean()
     frequencia_media = data["class_attendance_percent"].mean()
     estudo_medio = data["study_hours_per_day"].mean()
     sono_medio = data["sleep_hours"].mean()
     estresse_medio = data["mental_stress_level"].mean()
-
 
     return html.Div([
         html.H1(
@@ -1070,8 +1063,6 @@ def layout_visao_geral(data):
                 "marginBottom": "8px"
             }
         ),
-
-        # Quantificação da amostra selecionada
         metric_featured(
             label="Amostra analisada",
             value=f"{estudantes_analisados:,}".replace(",", ".") + " estudantes",
@@ -1079,8 +1070,6 @@ def layout_visao_geral(data):
                 f"{percentual_amostra:.1f}% do conjunto de dados original"
             )
         ),
-
-        # Indicadores
         dashboard_section(
             "Indicadores Gerais",
             "Resumo dos principais indicadores da amostra selecionada.",
@@ -1101,8 +1090,6 @@ def layout_visao_geral(data):
                 )
             ]
         ),
-
-        # Desempenho
         dashboard_section(
             "Desempenho Acadêmico",
             "Distribuição dos indicadores de rendimento dos estudantes.",
@@ -1116,8 +1103,6 @@ def layout_visao_geral(data):
                 )
             ]
         ),
-
-        # Caracterização da amostra
         html.Details(
             [
                 html.Summary(
@@ -1129,7 +1114,6 @@ def layout_visao_geral(data):
                         "marginBottom": "20px"
                     }
                 ),
-
                 html.Div(
                     [
                         graph(criar_grafico_genero(data)),
@@ -1145,8 +1129,6 @@ def layout_visao_geral(data):
                 "marginBottom": "28px"
             }
         ),
-
-        # Análises complementares
         dashboard_section(
             "Comparações Complementares",
             "Exploração do desempenho acadêmico entre diferentes cursos.",
@@ -1154,8 +1136,8 @@ def layout_visao_geral(data):
                 graph(criar_grafico_gpa_major(data))
             ]
         )
-
     ])
+
 
 def layout_habitos_correlacoes(data):
     matriz_correlacao = calcular_matriz_correlacoes(df=data)
@@ -1222,20 +1204,14 @@ def layout_habitos_correlacoes(data):
                 "marginTop": "20px"
             }
         ),
-
         html.P(
             "A matriz mostra associações lineares (Pearson) entre "
             "hábitos e indicadores de desempenho. Associação não implica causalidade.",
             style={"color": "#c084fc"}
         ),
-
         graph(heatmap),
-
         html.H2("Exploração de correlações"),
-        html.P(
-            "Selecione duas variáveis para explorar a relação entre elas."
-        ),
-
+        html.P("Selecione duas variáveis para explorar a relação entre elas."),
         html.Div(
             [
                 html.Div(
@@ -1285,12 +1261,10 @@ def layout_habitos_correlacoes(data):
                 "marginBottom": "20px",
             },
         ),
-
         dcc.Graph(
             id="grafico-dispersao-correlacao",
             figure={},
         ),
-        
         html.H3(
             "Correlações com os indicadores de desempenho",
             style={
@@ -1298,14 +1272,12 @@ def layout_habitos_correlacoes(data):
                 "marginTop": "20px"
             }
         ),
-
         html.P(
             "Spearman é apresentado como diagnóstico de robustez diante "
             "do efeito teto. Os valores-p da família hábito-desempenho "
             "foram ajustados pelo método Benjamini-Hochberg (FDR).",
             style={"color": "#94A3B8"}
         ),
-
         dash_table.DataTable(
             data=tabela_correlacao.to_dict("records"),
             columns=[
@@ -1329,6 +1301,7 @@ def layout_habitos_correlacoes(data):
         )
     ])
 
+
 def layout_perfis_estudantes(
     df_cluster,
     ordem_perfis,
@@ -1336,14 +1309,12 @@ def layout_perfis_estudantes(
     silhueta_atual,
     k_clusters
 ):
-    # Gráfico de distribuição dos clusters
     grafico_clusters = criar_grafico_clusters(
         df_cluster,
         ordem_perfis,
         mapa_cores_perfis
     )
 
-    # Colunas utilizadas na comparação dos perfis
     colunas_habitos = {
         "study_hours_per_day": ("Horas de Estudo", 0, 10),
         "sleep_hours": ("Horas de Sono", 0, 10),
@@ -1354,7 +1325,6 @@ def layout_perfis_estudantes(
 
     dados_perfil = []
 
-    # Calcula as médias de cada hábito para cada cluster
     for cluster_id in sorted(df_cluster["cluster_id"].unique()):
         mascara_cluster = df_cluster["cluster_id"] == cluster_id
         dados_cluster = df_cluster.loc[mascara_cluster]
@@ -1364,15 +1334,11 @@ def layout_perfis_estudantes(
         for coluna, (nome_habito, min_val, max_val) in colunas_habitos.items():
             media_real = dados_cluster[coluna].mean()
 
-            # Normaliza a média para uma escala de 0 a 100
             media_normalizada = (
                 (media_real - min_val) / (max_val - min_val)
             ) * 100
 
-            media_normalizada = max(
-                0,
-                min(100, media_normalizada)
-            )
+            media_normalizada = max(0, min(100, media_normalizada))
 
             dados_perfil.append({
                 "Hábito": nome_habito,
@@ -1384,14 +1350,12 @@ def layout_perfis_estudantes(
 
     df_perfil = pd.DataFrame(dados_perfil)
 
-    # Gráfico comparativo dos perfis
     grafico_perfil = criar_grafico_perfil_clusters(
         df_perfil,
         ordem_perfis,
         mapa_cores_perfis
     )
 
-    # Classificação descritiva da silhueta
     qualidade_silhueta = (
         "Boa separação"
         if silhueta_atual >= 0.35
@@ -1403,15 +1367,12 @@ def layout_perfis_estudantes(
             f"Perfis de estudantes — Agrupamento K-Means (k = {k_clusters})",
             style={"marginTop": "30px"}
         ),
-
         html.P(
             "Segmentação dos estudantes com base em cinco hábitos padronizados "
             "(estudo, sono, estresse, frequência e redes sociais). O GPA não entra "
             "no agrupamento: é usado apenas para ordenar e nomear os perfis.",
             style={"color": "#94A3B8"}
         ),
-
-        # Métrica de qualidade do agrupamento
         html.Div([
             metric(
                 f"Silhouette Score (k={k_clusters})",
@@ -1422,13 +1383,10 @@ def layout_perfis_estudantes(
             "marginBottom": "20px",
             "maxWidth": "350px"
         }),
-
-        # Gráficos dos perfis
         html.Div([
             graph(grafico_clusters),
             graph(grafico_perfil)
         ], style=GRID_2)
-
     ])
 
 def layout_avaliacao_kmeans(df_metricas_k, k_escolhido=None):
@@ -1437,7 +1395,6 @@ def layout_avaliacao_kmeans(df_metricas_k, k_escolhido=None):
             "Avaliação do agrupamento — K-Means",
             style={"color": "#F8FAFC", "marginBottom": "10px"}
         ),
-
         html.P(
             "Comparação entre diferentes valores de K utilizando "
             "métricas de qualidade e compactação dos agrupamentos.",
@@ -1470,6 +1427,7 @@ def layout_avaliacao_kmeans(df_metricas_k, k_escolhido=None):
         )
     ])
 
+
 def layout_avaliacao_motor_preditivo():
     if not SKLEARN_DISPONIVEL:
         return html.Section([
@@ -1483,14 +1441,12 @@ def layout_avaliacao_motor_preditivo():
     motor = obter_motor_preditivo()
     resultados = motor["resultados"].copy().round(3)
 
-    # Previsões sobre o conjunto de teste
     X_test = motor["X_test"]
     y_test = motor["y_test"]
 
     y_pred_teste = motor["modelo"].predict(X_test)
     y_pred_teste = np.clip(y_pred_teste, 0.0, 4.0)
 
-    # Gráfico de valores reais versus previstos
     fig_validacao = criar_grafico_real_vs_previsto(
         y_test,
         y_pred_teste
@@ -1501,26 +1457,20 @@ def layout_avaliacao_motor_preditivo():
             "Avaliação do Motor Preditivo",
             style={"color": "#F8FAFC", "marginBottom": "10px"}
         ),
-
         html.P(
             "Comparação e validação dos modelos de regressão utilizados "
             "para estimar o desempenho acadêmico.",
             style={"color": "#94A3B8", "marginBottom": "20px"}
         ),
-
-        # Métricas do modelo selecionado
         html.Div([
             metric("Modelo Ativo", motor["nome"]),
             metric("Coef. de Determinação (R²)", f"{resultados.iloc[0]['R²']:.3f}"),
             metric("Erro Médio (MAE)", f"{resultados.iloc[0]['MAE']:.3f}")
         ], style={**GRID_3, "marginBottom": "24px"}),
-
-        # Comparação entre os modelos
         html.H3(
             "Torneio de Modelos Preditivos",
             style={"color": "#F8FAFC", "marginBottom": "12px"}
         ),
-
         dash_table.DataTable(
             data=resultados.to_dict("records"),
             columns=[
@@ -1543,8 +1493,6 @@ def layout_avaliacao_motor_preditivo():
                 "border": "1px solid #334155"
             }
         ),
-
-        # Explicação dos algoritmos
         html.Details([
             html.Summary(
                 "🔍 Por que comparamos estes três modelos?",
@@ -1554,7 +1502,6 @@ def layout_avaliacao_motor_preditivo():
                     "color": "#38BDF8"
                 }
             ),
-
             dcc.Markdown("""
                 O motor preditivo do ASTRA utiliza uma abordagem de **torneio de algoritmos**:
 
@@ -1573,10 +1520,7 @@ def layout_avaliacao_motor_preditivo():
             "borderRadius": "8px",
             "border": "1px solid #334155"
         }),
-
         graph(criar_grafico_comparacao_modelos(resultados)),
-
-        # Validação no conjunto de teste
         html.H3(
             "Validação no Conjunto de Teste",
             style={
@@ -1585,7 +1529,6 @@ def layout_avaliacao_motor_preditivo():
                 "marginBottom": "12px"
             }
         ),
-
         html.P(
             "O gráfico compara os valores reais do GPA com as previsões "
             "do modelo no conjunto de teste. A linha tracejada representa "
@@ -1596,10 +1539,15 @@ def layout_avaliacao_motor_preditivo():
                 "marginBottom": "16px"
             }
         ),
-
         graph(fig_validacao)
     ])
 
+
+# -------------------------------------------------------------------------
+# CALLBACK REATIVO DE EXPLORAÇÃO BIVARIADA (DISPERSÃO DE CORRELAÇÕES)
+# -------------------------------------------------------------------------
+# Recebe exatamente os 11 Inputs (2 seletores de eixo + 9 filtros globais da sidebar)
+# e atualiza dinamicamente o diagrama de dispersão na aba "Hábitos e Correlações".
 @app.callback(
     Output("grafico-dispersao-correlacao", "figure"),
     Input("correlacao-x", "value"),
@@ -1617,7 +1565,6 @@ def layout_avaliacao_motor_preditivo():
 def atualizar_grafico_dispersao(
     coluna_x,
     coluna_y,
-    qtd,
     cursos,
     anos,
     generos,
@@ -1629,7 +1576,6 @@ def atualizar_grafico_dispersao(
     metodos,
 ):
     data = filtered_data(
-        qtd,
         cursos,
         anos,
         generos,
@@ -1644,8 +1590,17 @@ def atualizar_grafico_dispersao(
     if data.empty or coluna_x not in data.columns or coluna_y not in data.columns:
         return {}
 
-    return criar_grafico_dispersao_correlacao(data, coluna_x, coluna_y,)
+    return criar_grafico_dispersao_correlacao(data, coluna_x, coluna_y)
 
+
+# -------------------------------------------------------------------------
+# CALLBACK REATIVO PRINCIPAL DE ROTEAMENTO E RENDERIZAÇÃO DAS 4 ABAS
+# -------------------------------------------------------------------------
+# Orquestra a atualização do container principal conforme a aba selecionada:
+# 1. "tab-geral": indicadores descritivos globais e distribuições demográficas/GPA.
+# 2. "tab-correlacoes": matriz de Pearson, dispersão interativa e tabela com ajuste FDR.
+# 3. "tab-simulador": clusterização K-Means + PCA, torneio de modelos e simulador de GPA.
+# 4. "tab-metodologia": documentação científica, perguntas de pesquisa e dicionário.
 @app.callback(
     Output("dashboard-content", "children"),
     Input("main-tabs", "value"),
@@ -1661,11 +1616,11 @@ def atualizar_grafico_dispersao(
     Input("k-clusters", "value")
 )
 def renderizar_conteudo_abas(aba_ativa, cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos, k_clusters):
-
     data = filtered_data(cursos, anos, generos, idade, trabalho, estresse, frequencia, rendas, metodos)
 
     if data.empty:
         return html.Div("⚠️ Nenhum registro encontrado para a combinação atual de filtros. Tente flexibilizar os parâmetros na barra lateral.", style={"color": "#FBBF24", "padding": "24px"})
+    
     gpa_medio = data["GPA"].mean()
     frequencia_media = data["class_attendance_percent"].mean()
     estudo_medio = data["study_hours_per_day"].mean()
@@ -1687,8 +1642,6 @@ def renderizar_conteudo_abas(aba_ativa, cursos, anos, generos, idade, trabalho, 
     ]
 
     if aba_ativa == "tab-simulador":
-
-        # Executa o K-Means usando o 'k' selecionado no slider da barra lateral
         df_cluster, medias_cluster, ordem_gpa, mapa_nomes, df_metricas_k, silhueta_atual = executar_kmeans(
             data.copy(),
             k_clusters
@@ -1719,10 +1672,7 @@ def renderizar_conteudo_abas(aba_ativa, cursos, anos, generos, idade, trabalho, 
 
         return html.Div(
             kpis_header + [
-
                 secao_perfis,
-
-                # Seção Inferior: Relatório Geral Quantitativo dos diferentes 'k'
                 html.Hr(style={"borderColor": "#334155", "margin": "40px 0"}),
                 
                 layout_avaliacao_kmeans(df_metricas_k, k_clusters),
@@ -1736,12 +1686,7 @@ def renderizar_conteudo_abas(aba_ativa, cursos, anos, generos, idade, trabalho, 
 
                 # Avaliação do motor preditivo
                 layout_avaliacao_motor_preditivo(),
-
-                html.Hr(
-                    style={"borderColor": "#334155", "margin": "40px 0"}
-                ),
-
-                # Simulador de desempenho
+                html.Hr(style={"borderColor": "#334155", "margin": "40px 0"}),
                 layout_simulador_desempenho()
             ]
         )
