@@ -46,6 +46,74 @@ HABIT_RELATIONSHIPS = [
 # -------------------------------------------------------------------------
 # FUNÇÕES AUXILIARES DE CLASSIFICAÇÃO DE MAGNITUDE ESTATÍSTICA
 # -------------------------------------------------------------------------
+def _correlacao_pearson(df, coluna_x, coluna_y):
+    detalhes = _detalhes_correlacao(df, coluna_x, coluna_y)
+    return detalhes['correlacao'], detalhes['pares_validos']
+
+
+def _detalhes_correlacao(df, coluna_x, coluna_y):
+    if coluna_x not in df.columns or coluna_y not in df.columns:
+        return {
+            'correlacao': None,
+            'valor_p': None,
+            'spearman': None,
+            'spearman_valor_p': None,
+            'pares_validos': 0,
+            'sinal': 'indisponível',
+            'intensidade': 'não calculável',
+            'valida': False
+        }
+
+    pares = df[[coluna_x, coluna_y]].apply(pd.to_numeric, errors='coerce')
+    pares = pares.replace([float('inf'), float('-inf')], np.nan).dropna()
+    if len(pares) < 2 or pares[coluna_x].nunique() < 2 or pares[coluna_y].nunique() < 2:
+        return {
+            'correlacao': None,
+            'valor_p': None,
+            'spearman': None,
+            'spearman_valor_p': None,
+            'pares_validos': len(pares),
+            'sinal': 'indisponível',
+            'intensidade': 'não calculável',
+            'valida': False
+        }
+
+    resultado = pearsonr(pares[coluna_x], pares[coluna_y])
+    resultado_spearman = spearmanr(pares[coluna_x], pares[coluna_y])
+    correlacao = float(resultado.statistic)
+    valor_p = float(resultado.pvalue)
+    spearman = float(resultado_spearman.statistic)
+    spearman_valor_p = float(resultado_spearman.pvalue)
+
+    # Com poucos pares (ex.: 2), versões recentes do SciPy devolvem p-valor NaN.
+    # O coeficiente continua válido; apenas o p-valor fica indisponível.
+    valor_p = valor_p if np.isfinite(valor_p) else None
+    spearman_valor_p = spearman_valor_p if np.isfinite(spearman_valor_p) else None
+
+    if not all(np.isfinite(valor) for valor in (correlacao, spearman)):
+        return {
+            'correlacao': None,
+            'valor_p': None,
+            'spearman': None,
+            'spearman_valor_p': None,
+            'pares_validos': len(pares),
+            'sinal': 'indisponível',
+            'intensidade': 'não calculável',
+            'valida': False
+        }
+
+    return {
+        'correlacao': correlacao,
+        'valor_p': valor_p,
+        'spearman': spearman,
+        'spearman_valor_p': spearman_valor_p,
+        'pares_validos': len(pares),
+        'sinal': 'positiva' if correlacao > 0 else 'negativa' if correlacao < 0 else 'nula',
+        'intensidade': _classificar_intensidade(correlacao),
+        'valida': True
+    }
+
+
 def _classificar_intensidade(correlacao):
     """
     Classifica qualitativamente a magnitude absoluta do coeficiente de correlação
