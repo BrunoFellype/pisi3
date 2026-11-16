@@ -205,6 +205,7 @@ def treinar_motor_preditivo(df):
             "Modelo": nome,
             **metricas_teste,
             "R² (treino)": metricas_treino["R²"],
+            "MAE (treino)": metricas_treino["MAE"],
             "RMSE (treino)": metricas_treino["RMSE"],
         })
 

@@ -94,53 +94,21 @@ def main():
     X_test = retorno_motor["X_test"]
     y_test = retorno_motor["y_test"]
 
-    # Reconstitui X_train e y_train com base nas amostras que sobraram do split
-    df_trab = df.copy()
-    features_habitos = [col for col in habitos_cluster if col in df_trab.columns]
-    
-    try:
-        sub_temp = df_trab[features_habitos].dropna()
-        if not sub_temp.empty:
-            sc_temp = StandardScaler()
-            labels_temp = KMeans(n_clusters=3, random_state=42, n_init=10).fit_predict(
-                sc_temp.fit_transform(sub_temp)
-            )
-            mapa = {0: "Perfil Comportamental A", 1: "Perfil Comportamental B", 2: "Perfil Comportamental C"}
-            df_trab.loc[sub_temp.index, "cluster_perfil"] = pd.Series(labels_temp, index=sub_temp.index).map(mapa)
-    except Exception:
-        pass
-    
-    if "cluster_perfil" not in df_trab.columns:
-        df_trab["cluster_perfil"] = "Perfil Geral"
-    else:
-        df_trab["cluster_perfil"] = df_trab["cluster_perfil"].fillna("Perfil Geral")
-
-    X_completo = df_trab[retorno_motor["features"]]
-    y_completo = df_trab["GPA"]
-    
-    X_train = X_completo.drop(index=X_test.index)
-    y_train = y_completo.drop(index=y_test.index)
-
+    # Tabelas lidas direto do motor (mesmos números do código de produção)
     linhas_treino = []
     linhas_teste = []
-
-    for nome_modelo, pipeline in modelos_treinados.items():
-        # Avaliação em Treino
-        y_pred_train = np.clip(pipeline.predict(X_train), 0.0, 4.0)
+    for _, r in retorno_motor["resultados"].iterrows():
         linhas_treino.append({
-            "Modelo": nome_modelo,
-            "R²": round(r2_score(y_train, y_pred_train), 4),
-            "MAE": round(mean_absolute_error(y_train, y_pred_train), 4),
-            "RMSE": round(np.sqrt(mean_squared_error(y_train, y_pred_train)), 4),
+            "Modelo": r["Modelo"],
+            "R²": round(float(r["R² (treino)"]), 4),
+            "MAE": round(float(r["MAE (treino)"]), 4),
+            "RMSE": round(float(r["RMSE (treino)"]), 4),
         })
-
-        # Avaliação em Teste
-        y_pred_test = np.clip(pipeline.predict(X_test), 0.0, 4.0)
         linhas_teste.append({
-            "Modelo": nome_modelo,
-            "R²": round(r2_score(y_test, y_pred_test), 4),
-            "MAE": round(mean_absolute_error(y_test, y_pred_test), 4),
-            "RMSE": round(np.sqrt(mean_squared_error(y_test, y_pred_test)), 4),
+            "Modelo": r["Modelo"],
+            "R²": round(float(r["R²"]), 4),
+            "MAE": round(float(r["MAE"]), 4),
+            "RMSE": round(float(r["RMSE"]), 4),
         })
 
     print("\n>>> TABELA 1: DESEMPENHO NO TREINO (80% - 8.000 amostras)")
