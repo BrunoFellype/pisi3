@@ -23,6 +23,9 @@ from analysis.correlacoes import (
     calcular_matriz_correlacoes
 )
 from analysis.clusters import executar_kmeans
+from analysis.avancado import (
+    calcular_analises_avancadas, grafico_pca_outliers, grafico_shap, grafico_confusao,
+)
 from analysis.predicao import treinar_motor_preditivo, atribuir_perfil, FEATURES_HABITOS_CLUSTER
 from analysis.correlacoes import calcular_correlacoes, calcular_matriz_correlacoes
 from data.load import get_Dataset
@@ -793,7 +796,13 @@ app.layout = html.Div([
                     selected_style=TAB_SELECTED_STYLE
                 ),
                 dcc.Tab(
-                    label="Metodologia", 
+                    label="Análises Avançadas",
+                    value="tab-avancado",
+                    style=TAB_STYLE,
+                    selected_style=TAB_SELECTED_STYLE
+                ),
+                dcc.Tab(
+                    label="Metodologia",
                     value="tab-metodologia", 
                     style=TAB_STYLE, 
                     selected_style=TAB_SELECTED_STYLE
@@ -815,6 +824,130 @@ app.layout = html.Div([
 @lru_cache(maxsize=1)
 def obter_motor_preditivo():
     return treinar_motor_preditivo(df_raw)
+
+
+def _tabela_escura(df):
+    return dash_table.DataTable(
+        data=df.to_dict("records"),
+        columns=[{"name": str(c), "id": str(c)} for c in df.columns],
+        style_table={"overflowX": "auto", "marginBottom": "20px"},
+        style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC", "fontWeight": "bold"},
+        style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1", "padding": "10px", "border": "1px solid #334155"},
+    )
+
+
+def layout_analises_avancadas():
+    """Aba com PCA, outliers (HDBSCAN), classificação, SHAP e justiça. Usa a base completa."""
+    if not SKLEARN_DISPONIVEL:
+        return html.P("O pacote scikit-learn não está disponível.", style={"color": "#FBBF24"})
+
+    r = calcular_analises_avancadas(df_raw)
+    pca, clf, expl = r["pca"], r["classificacao"], r["explicabilidade"]
+    dados = pca["dados"]
+    comp, vaz = r["composicao"], r["vazamento"]
+    var1, var2 = pca["variancia"]
+    n_out = int((dados["Atípico"] == "Atípico").sum())
+    p1 = dados[dados["Perfil"] == "Perfil 1"]
+    out_p1 = p1[p1["Atípico"] == "Atípico"]
+
+    cols = ["GPA"] + list(pca["cargas"]["Hábito"])
+    comparativo = pd.DataFrame([
+        {
+            "Grupo": nome, "Alunos": len(g),
+            **{c: f"{g[c].mean():.2f} ± {g[c].std():.2f}".replace(".", ",") if len(g) > 1 else "-" for c in cols},
+        }
+        for nome, g in [("Perfil 1 (todos)", p1), ("Perfil 1 atípicos", out_p1)]
+    ])
+
+    fig_pca = grafico_pca_outliers(dados)
+    estilizar_grafico(fig_pca, "Os 5 hábitos resumidos em 2 eixos (PCA), com atípicos marcados")
+
+    figs_confusao = []
+    for nome, m in clf["matrizes"].items():
+        fig_c = grafico_confusao(m, nome)
+        estilizar_grafico(fig_c, nome)
+        figs_confusao.append(graph(fig_c))
+
+    blocos = [
+        html.H2("🔬 Análises Avançadas", style={"color": "#38BDF8"}),
+        html.P("Calculadas sobre a base completa (10.000 alunos), ignorando os filtros da barra lateral.",
+               style={"color": "#c084fc"}),
+
+        html.H3("1. Redução de dimensionalidade (PCA)", style={"color": "#F8FAFC"}),
+        html.P(
+            f"Resume os 5 hábitos em 2 eixos que guardam {(var1 + var2) * 100:.2f}% da variação "
+            f"(PC1 {var1 * 100:.1f}% e PC2 {var2 * 100:.1f}%). Silhueta do K-Means (k=3): "
+            f"{pca['sil_orig']:.3f} nos 5 hábitos e {pca['sil_pca']:.3f} nos 2 eixos.",
+            style={"color": "#94A3B8"}),
+        graph(fig_pca),
+        html.P("Peso de cada hábito em cada eixo:", style={"color": "#94A3B8"}),
+        _tabela_escura(pca["cargas"]),
+
+        html.H3("2. Alunos atípicos (HDBSCAN)", style={"color": "#F8FAFC", "marginTop": "28px"}),
+        html.P(
+            f"O HDBSCAN marcou {n_out} alunos ({n_out / len(dados) * 100:.2f}% da base) fora de qualquer região densa. "
+            f"No Perfil 1 (melhor GPA) são {len(out_p1)} alunos ({len(out_p1) / len(p1) * 100:.2f}%): "
+            "bons em GPA, mas com hábitos diferentes dos colegas.",
+            style={"color": "#94A3B8"}),
+        _tabela_escura(comparativo),
+        html.P(
+            f"O que diferencia os {comp['n_atipicos']} atípicos dos {comp['n_tipicos']} típicos do Perfil 1? "
+            "Maiores diferenças de composição (pontos percentuais):",
+            style={"color": "#94A3B8"}),
+        _tabela_escura(comp["diferencas"]),
+        html.P("Médias de estresse, sono e estudo nos dois grupos:", style={"color": "#94A3B8"}),
+        _tabela_escura(comp["medias"].reset_index()),
+
+        html.H3("3. Vazamento do GPA (data leakage)", style={"color": "#F8FAFC", "marginTop": "28px"}),
+        html.P(
+            f"As notas de prova e de trabalhos têm correlação {vaz['corr_prova']:.2f} e {vaz['corr_trabalhos']:.2f} "
+            "com o GPA: são resultados acadêmicos, quase a mesma informação do alvo. Por isso ficam fora de todos "
+            "os modelos. A tabela mostra o quanto cada grupo explica o GPA (R² no teste). "
+            "O GPA também não entra no K-Means.",
+            style={"color": "#94A3B8"}),
+        _tabela_escura(vaz["tabela"]),
+
+        html.H3("4. Classificação: GPA ≥ 3,5", style={"color": "#F8FAFC", "marginTop": "28px"}),
+        html.P(
+            f"{clf['positivos']:.1f}% dos alunos passam do limiar. Comparamos o modelo com e sem "
+            "balanceamento das classes. Usa só hábitos e idade (sem nota de prova nem trabalhos, para não vazar o GPA).",
+            style={"color": "#94A3B8"}),
+        _tabela_escura(clf["metricas"]),
+        html.Div(figs_confusao, style=GRID_2),
+        html.P("Outros limiares de corte (modelo balanceado). O GPA vai de 0 a 4, então 3,5 equivale a ~8,75 numa escala de 10:",
+               style={"color": "#94A3B8"}),
+        _tabela_escura(r["limiares"]),
+
+        html.H3("5. Explicabilidade (SHAP)", style={"color": "#F8FAFC", "marginTop": "28px"}),
+    ]
+
+    if expl["shap"] is not None:
+        fig_shap = grafico_shap(expl["shap"])
+        estilizar_grafico(fig_shap, "Quanto cada variável move a previsão do GPA (|SHAP| médio)")
+        blocos.append(graph(fig_shap))
+    else:
+        blocos.append(html.P(expl["aviso"], style={"color": "#FBBF24"}))
+
+    blocos.append(html.H3("6. Justiça: o erro é igual entre grupos?", style={"color": "#F8FAFC", "marginTop": "28px"}))
+    blocos.append(html.P(
+        "MAE do modelo de GPA por grupo. Valores parecidos indicam que o modelo erra de forma parecida para todos.",
+        style={"color": "#94A3B8"}))
+    for tabela in expl["justica"].values():
+        blocos.append(_tabela_escura(tabela))
+
+    blocos += [
+        html.H3("7. Normalização e balanceamento", style={"color": "#F8FAFC", "marginTop": "28px"}),
+        html.Ul([
+            html.Li("Normalização: StandardScaler (média 0, desvio 1) nos 5 hábitos antes do PCA e do K-Means, "
+                    "e nas variáveis numéricas dos modelos de regressão (junto com imputação pela mediana)."),
+            html.Li("Divisão treino/teste: 80/20 com semente 42, feita antes de ajustar scaler, K-Means e modelos."),
+            html.Li(f"Balanceamento: só na classificação (GPA ≥ 3,5 tem {clf['positivos']:.1f}% de positivos). "
+                    "Comparamos sem balanceamento e com class_weight='balanced' (tabela da seção 4)."),
+            html.Li("Regressão do GPA não é balanceada: o alvo é contínuo."),
+        ], style={"color": "#94A3B8"}),
+    ]
+
+    return html.Section(blocos)
 
 
 def layout_simulador_desempenho():
@@ -1325,24 +1458,43 @@ def layout_perfis_estudantes(
 
         for coluna, (nome_habito, min_val, max_val) in colunas_habitos.items():
             media_real = dados_cluster[coluna].mean()
+            desvio_real = dados_cluster[coluna].std()
 
             media_normalizada = (
                 (media_real - min_val) / (max_val - min_val)
             ) * 100
 
             media_normalizada = max(0, min(100, media_normalizada))
+            desvio_normalizado = (desvio_real / (max_val - min_val)) * 100
 
             dados_perfil.append({
                 "Hábito": nome_habito,
                 "Média": round(media_normalizada, 1),
+                "Desvio": round(desvio_normalizado, 1),
                 "Média Real": round(media_real, 2),
+                "Desvio Real": round(desvio_real, 2),
                 "perfil_cluster": perfil,
                 "cluster_id": cluster_id
             })
 
     df_perfil = pd.DataFrame(dados_perfil)
 
-    grafico_perfil = criar_grafico_perfil_clusters(
+    def _fmt(valor):
+        return f"{valor:.2f}".replace(".", ",")
+
+    linhas_tabela = []
+    for cluster_id in sorted(df_cluster["cluster_id"].unique()):
+        linha_perfil = df_perfil[df_perfil["cluster_id"] == cluster_id]
+        linha = {
+            "Perfil": linha_perfil["perfil_cluster"].iloc[0],
+            "Alunos": int((df_cluster["cluster_id"] == cluster_id).sum()),
+        }
+        for _, item in linha_perfil.iterrows():
+            linha[item["Hábito"]] = f"{_fmt(item['Média Real'])} ± {_fmt(item['Desvio Real'])}"
+        linhas_tabela.append(linha)
+    tabela_media_desvio = pd.DataFrame(linhas_tabela)
+
+    grafico_perfil =criar_grafico_perfil_clusters(
         df_perfil,
         ordem_perfis,
         mapa_cores_perfis
@@ -1378,7 +1530,33 @@ def layout_perfis_estudantes(
         html.Div([
             graph(grafico_clusters),
             graph(grafico_perfil)
-        ], style=GRID_2)
+        ], style=GRID_2),
+        html.H3(
+            "Média ± desvio-padrão por perfil (unidades originais)",
+            style={"color": "#F8FAFC", "marginTop": "24px"}
+        ),
+        html.P(
+            "A média sozinha esconde a dispersão. O desvio-padrão mostra o quanto "
+            "os alunos de um mesmo perfil variam: quando ele é grande em relação à "
+            "diferença entre perfis, os grupos se sobrepõem.",
+            style={"color": "#94A3B8"}
+        ),
+        dash_table.DataTable(
+            data=tabela_media_desvio.to_dict("records"),
+            columns=[{"name": col, "id": col} for col in tabela_media_desvio.columns],
+            style_table={"overflowX": "auto", "marginBottom": "28px"},
+            style_header={
+                "backgroundColor": "#1E293B",
+                "color": "#F8FAFC",
+                "fontWeight": "bold"
+            },
+            style_cell={
+                "backgroundColor": "#0F172A",
+                "color": "#CBD5E1",
+                "padding": "10px",
+                "border": "1px solid #334155"
+            }
+        )
     ])
 
 def layout_avaliacao_kmeans(df_metricas_k, k_escolhido=None):
@@ -1682,6 +1860,9 @@ def renderizar_conteudo_abas(aba_ativa, cursos, anos, generos, idade, trabalho, 
                 layout_simulador_desempenho()
             ]
         )
+
+    if aba_ativa == "tab-avancado":
+        return layout_analises_avancadas()
 
     if aba_ativa == "tab-metodologia":
         return html.Div([

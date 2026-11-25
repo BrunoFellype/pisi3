@@ -756,15 +756,20 @@ def criar_grafico_perfil_clusters(df, ordem_perfis, cores_cluster_map):
         df,
         x="Hábito",
         y="Média",
+        error_y="Desvio",
         color="perfil_cluster",
         category_orders={
             "perfil_cluster": ordem_perfis
         },
         color_discrete_map= cores_cluster_map,
         barmode="group",
+        custom_data=["Média Real", "Desvio Real"],
         labels={"Média": "Média observada", "perfil_cluster": "Perfil"}
     )
-    estilizar_grafico(fig_km_bars, "Médias observadas dos perfis de estudantes")
+    fig_km_bars.update_traces(
+        hovertemplate="%{x}<br>Média: %{customdata[0]} ± %{customdata[1]} (desvio-padrão)<extra>%{fullData.name}</extra>"
+    )
+    estilizar_grafico(fig_km_bars, "Média ± desvio-padrão dos perfis de estudantes")
     fig_km_bars.update_layout(
     legend=dict(
         orientation="h",       # Coloca os itens da legenda na horizontal (um do lado do outro)
