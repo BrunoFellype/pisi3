@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -7,6 +8,7 @@ from ASTRA_Dashboard.analysis.correlacoes import (
     calcular_correlacoes,
     calcular_matriz_correlacoes,
 )
+from ASTRA_Dashboard.visualization.graphs import criar_heatmap_correlacao
 
 
 def _dados_completos():
@@ -112,3 +114,42 @@ def test_ignora_valores_nao_finitos_e_preserva_formato_da_matriz():
 
     assert list(matriz.index) == ["habito", "desempenho"]
     assert matriz.loc["habito", "desempenho"] == pytest.approx(1)
+
+
+def test_heatmap_correlacao_traduz_rotulos_e_formata_sem_alterar_coeficientes():
+    colunas = HABIT_VARIABLES + PERFORMANCE_VARIABLES
+    valores = np.eye(len(colunas))
+    valores[0, 1] = valores[1, 0] = 0.7171817
+    valores[2, 12] = valores[12, 2] = -0.427295
+    matriz = pd.DataFrame(valores, index=colunas, columns=colunas)
+
+    fig = criar_heatmap_correlacao(matriz, "Matriz de correlação")
+    trace = fig.data[0]
+    rotulos_esperados = [
+        "Horas de estudo por dia",
+        "Frequência nas aulas (%)",
+        "Horas de sono",
+        "Tempo de tela",
+        "Uso de redes sociais",
+        "Horas de jogos",
+        "Exercícios por semana",
+        "Nível de estresse mental",
+        "Uso de ferramentas de IA",
+        "Dias de preparação para provas",
+        "Consumo diário de café",
+        "Atividades extracurriculares",
+        "Desempenho acadêmico (GPA)",
+        "Nota da prova final",
+        "Nota das atividades",
+    ]
+
+    assert list(trace.x) == rotulos_esperados
+    assert list(trace.y) == rotulos_esperados
+    assert trace.text[0][0] == "1,00"
+    assert trace.text[0][1] == "0,72"
+    assert trace.text[2][12] == "-0,43"
+    assert np.array_equal(np.asarray(trace.z), valores)
+    assert fig.layout.coloraxis.cmin == -1
+    assert fig.layout.coloraxis.cmax == 1
+    assert trace.xgap == 2
+    assert trace.ygap == 2

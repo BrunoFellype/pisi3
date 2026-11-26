@@ -56,6 +56,36 @@ TAB_SELECTED_STYLE = {
     "fontWeight": "700"
 }
 
+ROTULOS_VARIAVEIS = {
+    "student_id": "Identificador do estudante",
+    "age": "Idade",
+    "gender": "Gênero",
+    "country": "País",
+    "major": "Curso",
+    "university_year": "Ano acadêmico",
+    "GPA": "Desempenho acadêmico (GPA)",
+    "study_hours_per_day": "Horas de estudo por dia",
+    "class_attendance_percent": "Frequência nas aulas (%)",
+    "sleep_hours": "Horas de sono por noite",
+    "screen_time_hours": "Tempo de tela (horas)",
+    "social_media_hours": "Tempo em redes sociais (horas)",
+    "gaming_hours": "Tempo com jogos (horas)",
+    "exercise_hours_per_week": "Atividade física (horas por semana)",
+    "part_time_job": "Trabalho em meio período",
+    "relationship_status": "Estado civil",
+    "family_income_level": "Faixa de renda familiar",
+    "internet_quality": "Qualidade da internet",
+    "mental_stress_level": "Nível de estresse mental",
+    "AI_tool_usage_hours": "Horas de uso de ferramentas de IA",
+    "favorite_AI_tool": "Ferramenta de IA preferida",
+    "note_taking_method": "Método de anotação",
+    "exam_preparation_days": "Dias de preparação para exames",
+    "coffee_consumption_per_day": "Consumo diário de café",
+    "extracurricular_hours_per_week": "Horas semanais em atividades extracurriculares",
+    "final_exam_score": "Nota da prova final",
+    "assignment_score": "Nota das atividades"
+}
+
 try:
     import sklearn
     SKLEARN_DISPONIVEL = True
@@ -190,11 +220,40 @@ def control_label(text):
 
 
 def multi_control(identifier, label, options):
+    rotulos_opcoes = {
+        "Biology": "Biologia",
+        "Business": "Negócios",
+        "Computer Science": "Ciência da Computação",
+        "Economics": "Economia",
+        "Engineering": "Engenharia",
+        "Law": "Direito",
+        "Mathematics": "Matemática",
+        "Medicine": "Medicina",
+        "Physics": "Física",
+        "Psychology": "Psicologia",
+        "Female": "Feminino",
+        "Male": "Masculino",
+        "High": "Alta",
+        "Low": "Baixa",
+        "Middle": "Média",
+        "Handwritten": "Manuscrito",
+        "Mixed": "Misto"
+    }
     return html.Div([
         control_label(label),
         dcc.Dropdown(
             id=identifier,
-            options=[{"label": str(item), "value": item} for item in options],
+            options=[
+                {
+                    "label": (
+                        f"{item}º ano"
+                        if identifier == "anos"
+                        else rotulos_opcoes.get(str(item), str(item))
+                    ),
+                    "value": item
+                }
+                for item in options
+            ],
             value=options,
             multi=True,
             style={"color": "#0F172A"}
@@ -359,7 +418,7 @@ def project_section():
                 "centraliza a rotina acadêmica universitária, "
                 "correlacionando hábitos de estudo, sono, bem-estar e "
                 "uso de ferramentas tecnológicas para antecipar o "
-                "desempenho acadêmico (GPA) e mitigar o risco de "
+                "desempenho acadêmico (GPA) e reduzir o risco de "
                 "sobrecarga estudantil.",
                 style={
                     "color": "#CBD5E1",
@@ -480,7 +539,7 @@ Os dados abrangem características dos estudantes, hábitos cotidianos, utiliza�
 
 A preparação dos dados é importante para verificar sua consistência e adequação às análises estatísticas e aos modelos utilizados no dashboard. 
 
-Portanto, anterior a qualquer análise, foi feita uma investigação minuciosa buscando outliers, valores nulos, a interpretação do dataset e a definição dos objetivos das análises dentro dos limites impostos pelas 27 variáveis.
+Antes das análises, foram investigados valores atípicos, dados ausentes, a interpretação da base de dados e os objetivos possíveis dentro dos limites das 27 variáveis.
             """, style={
                 "color": "#CBD5E1",
                 "lineHeight": "1.8",
@@ -515,7 +574,7 @@ Para investigar as relações entre as variáveis, o dashboard utiliza:
 
 A análise também considera a significância estatística e a correção para múltiplas comparações, auxiliando na interpretação dos resultados encontrados. 
 
-Sendo relevante destacar que dentro das 27 variáveis, 3 são consideradas essenciais: gpa, final_exam_score e assignment_score. Com o gpa sendo a variável target.
+Entre as 27 variáveis, três são essenciais para a análise: GPA, nota da prova final e nota das atividades. O GPA é a variável-alvo.
             """, style={
                 "color": "#CBD5E1",
                 "lineHeight": "1.8",
@@ -550,7 +609,7 @@ Para visualizar os perfis em duas dimensões, aplica-se a **PCA** (Análise de C
 A avaliação dos agrupamentos considera duas métricas principais:
 
 - **Inércia:** mede a soma dos quadrados das distâncias entre as observações e os respectivos centroides. Valores menores indicam grupos mais compactos, embora a métrica tenda a diminuir à medida que o número de grupos aumenta.
-- **Silhouette Score:** avalia a proximidade das observações em relação ao próprio grupo em comparação com os demais. Valores mais elevados geralmente indicam melhor separação entre os agrupamentos.
+- **Coeficiente de silhueta:** avalia a proximidade das observações em relação ao próprio grupo em comparação com os demais. Valores mais elevados geralmente indicam melhor separação entre os agrupamentos.
 
 Os resultados permitem comparar as configurações testadas e examinar as características médias dos grupos identificados.
             """, style={
@@ -576,7 +635,7 @@ Os resultados permitem comparar as configurações testadas e examinar as caract
                 }
             ),
             dcc.Markdown("""
-A etapa de modelagem preditiva busca estimar o **GPA (Grade Point Average)** dos estudantes a partir das características utilizadas pelo motor preditivo.
+A etapa de modelagem preditiva busca estimar o **desempenho acadêmico (GPA)** dos estudantes a partir das características utilizadas pelo motor preditivo.
 
 Para isso, o dashboard compara três algoritmos de regressão:
 
@@ -593,7 +652,7 @@ Os dados são divididos em dois conjuntos:
 - **80% para treinamento:** utilizados no ajuste dos modelos.
 - **20% para teste:** reservados para avaliar o desempenho preditivo em observações não utilizadas durante o treinamento.
 
-        A comparação dos algoritmos permite identificar o modelo com melhor desempenho segundo os critérios definidos no motor preditivo. As métricas também são calculadas no treino: se o resultado do treino for muito melhor que o do teste, há indício de *overfitting*.
+        A comparação dos algoritmos permite identificar o modelo com melhor desempenho segundo os critérios definidos no motor preditivo. As métricas também são calculadas no treino: se o resultado do treino for muito melhor que o do teste, há indício de sobreajuste.
 
         A importância das variáveis é medida por **permutação**: embaralha-se uma variável no conjunto de teste e mede-se quanto o R² cai.
 
@@ -643,6 +702,31 @@ def dictionary_section():
         open(dictionary_path, encoding="utf-8").read()
         if os.path.exists(dictionary_path)
         else "Consulte o arquivo Data/dicionario_de_dados.md no repositório."
+    )
+    for coluna, rotulo in ROTULOS_VARIAVEIS.items():
+        dictionary_text = dictionary_text.replace(f"`{coluna}`", f"`{rotulo}`")
+    for valor, rotulo in {
+        "Female": "Feminino",
+        "Male": "Masculino",
+        "Yes": "Sim",
+        "No": "Não",
+        "Low": "Baixa",
+        "Middle": "Média",
+        "High": "Alta",
+        "Poor": "Ruim",
+        "Average": "Média",
+        "Good": "Boa",
+        "Handwritten": "Manuscrito",
+        "Mixed": "Misto",
+        "None": "Não informado"
+    }.items():
+        dictionary_text = dictionary_text.replace(f"`{valor}`", f"`{rotulo}`")
+    dictionary_text = (
+        dictionary_text
+        .replace("dataset", "conjunto de dados")
+        .replace("outliers", "valores atípicos")
+        .replace("Grade Point Average", "média de desempenho acadêmico")
+        .replace("`AI_tool_usage_hours == 0`", "`horas de uso de ferramentas de IA iguais a zero`")
     )
 
     return html.Section([
@@ -695,8 +779,8 @@ def layout_controls():
         html.P("Personalize sua análise:", style={"color": "#c084fc", "fontSize": "13px"}),
         
         multi_control("cursos", "Cursos (Graduação):", sorted(df_raw["major"].dropna().unique())),
-        multi_control("anos", "Período / Ano Académico:", sorted(df_raw["university_year"].dropna().unique())),
-        multi_control("generos", "Género:", sorted(df_raw["gender"].dropna().unique())),
+        multi_control("anos", "Período / Ano acadêmico:", sorted(df_raw["university_year"].dropna().unique())),
+        multi_control("generos", "Gênero:", sorted(df_raw["gender"].dropna().unique())),
         
         control_label("Faixa Etária (Idade):"),
         dcc.RangeSlider(
@@ -744,7 +828,7 @@ def layout_controls():
         multi_control("metodos", "Método de Anotação:", sorted(df_raw["note_taking_method"].dropna().unique())),
         html.Hr(style={"borderColor": "#1E293B", "margin": "24px 0"}),
         
-        html.H3("🤖 Machine Learning (K-Means)", style={"color": "#38BDF8"}),
+        html.H3("🤖 Aprendizado de Máquina (K-Means)", style={"color": "#38BDF8"}),
         dcc.Checklist(
             id="ativar-kmeans",
             options=[{"label": " Ativar Clusterização K-Means", "value": "ativo"}],
@@ -768,7 +852,7 @@ app.layout = html.Div([
     layout_controls(),
     html.Main([
         html.Div([
-            html.H1("ASTRA Analytics - Painel de Hábitos & Desempenho Académico",
+            html.H1("ASTRA — Painel de Hábitos e Desempenho Acadêmico",
                     style={"color": "#F8FAFC", "marginBottom": "4px"}),
             html.P("Plataforma analítica e preditiva da rotina e rendimento universitário.",
                     style={"color": "#c084fc", "marginBottom": "20px"}),
@@ -827,9 +911,33 @@ def obter_motor_preditivo():
 
 
 def _tabela_escura(df):
+    rotulos = {
+        **ROTULOS_VARIAVEIS,
+        "Female": "Feminino",
+        "Male": "Masculino",
+        "Yes": "Sim",
+        "No": "Não",
+        "Low": "Baixa",
+        "Middle": "Média",
+        "High": "Alta",
+        "Poor": "Ruim",
+        "Average": "Média",
+        "Good": "Boa",
+        "Handwritten": "Manuscrito",
+        "Mixed": "Misto",
+        "Digital": "Digital"
+    }
+    dados = df.copy()
+    for coluna in dados.select_dtypes(include=["object", "string"]).columns:
+        dados[coluna] = dados[coluna].map(
+            lambda valor: rotulos.get(valor, valor) if isinstance(valor, str) else valor
+        )
     return dash_table.DataTable(
-        data=df.to_dict("records"),
-        columns=[{"name": str(c), "id": str(c)} for c in df.columns],
+        data=dados.to_dict("records"),
+        columns=[
+            {"name": rotulos.get(str(coluna), str(coluna)), "id": str(coluna)}
+            for coluna in dados.columns
+        ],
         style_table={"overflowX": "auto", "marginBottom": "20px"},
         style_header={"backgroundColor": "#1E293B", "color": "#F8FAFC", "fontWeight": "bold"},
         style_cell={"backgroundColor": "#0F172A", "color": "#CBD5E1", "padding": "10px", "border": "1px solid #334155"},
@@ -898,7 +1006,7 @@ def layout_analises_avancadas():
         html.P("Médias de estresse, sono e estudo nos dois grupos:", style={"color": "#94A3B8"}),
         _tabela_escura(comp["medias"].reset_index()),
 
-        html.H3("3. Vazamento do GPA (data leakage)", style={"color": "#F8FAFC", "marginTop": "28px"}),
+        html.H3("3. Vazamento de informações do GPA", style={"color": "#F8FAFC", "marginTop": "28px"}),
         html.P(
             f"As notas de prova e de trabalhos têm correlação {vaz['corr_prova']:.2f} e {vaz['corr_trabalhos']:.2f} "
             "com o GPA: são resultados acadêmicos, quase a mesma informação do alvo. Por isso ficam fora de todos "
@@ -953,7 +1061,7 @@ def layout_analises_avancadas():
 def layout_simulador_desempenho():
     if not SKLEARN_DISPONIVEL:
         return html.Section([
-            html.H2("⚡ Motor Preditivo de Desempenho Académico"),
+            html.H2("⚡ Motor Preditivo de Desempenho Acadêmico"),
             html.P("O pacote scikit-learn não está disponível.", style={"color": "#FBBF24"})
         ])
 
@@ -1098,17 +1206,17 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
     gpa = max(0.0, min(4.0, float(motor["modelo"].predict(entrada)[0])))
     
     if sono < 5.5 and estresse >= 6.0:
-        classificacao = "Indício de sobrecarga académica"
+        classificacao = "Indício de sobrecarga acadêmica"
         cor_status = "#F43F5E"
-        obs = "Atenção: A combinação de sono reduzido e stress elevado prejudica fortemente o rendimento contínuo."
+        obs = "Atenção: a combinação de sono reduzido e estresse elevado prejudica o desempenho contínuo."
     elif gpa >= 3.5:
-        classificacao = "Alto Desempenho Académico"
+        classificacao = "Alto desempenho acadêmico"
         cor_status = "#34D399"
         obs = "Padrão de rotina consistente e favorável para manter o GPA próximo da faixa máxima."
     elif gpa >= 2.5:
-        classificacao = "Desempenho Intermédio"
+        classificacao = "Desempenho intermediário"
         cor_status = "#FBBF24"
-        obs = "Rendimento médio. Aumentar a frequência presencial e o sono são os fatores de maior ganho potencial."
+        obs = "Desempenho médio. Aumentar a frequência às aulas e as horas de sono são os fatores de maior ganho potencial."
     else:
         classificacao = "Atenção ao Desempenho"
         cor_status = "#F43F5E"
@@ -1116,7 +1224,7 @@ def executar_simulacao(n_clicks, estudo, sono, estresse, frequencia, redes, idad
 
     children = [
         html.Div([
-            metric("GPA Estimado", f"{gpa:.2f}"),
+            metric("Desempenho acadêmico estimado (GPA)", f"{gpa:.2f}"),
             html.Div([
                 metric("Classificação Projetada", classificacao),
                 html.P(f"Equivalente a {gpa_para_nota(gpa):.2f}/10 na escala decimal. {obs}", 
@@ -1201,7 +1309,7 @@ def layout_visao_geral(data):
             [
                 html.Div(
                     [
-                        metric("GPA Médio", f"{gpa_medio:.2f}"),
+                        metric("Desempenho acadêmico médio (GPA)", f"{gpa_medio:.2f}"),
                         metric("Frequência Média", f"{frequencia_media:.1f}%"),
                         metric("Estudo Diário", f"{estudo_medio:.1f} h"),
                         metric("Sono Diário", f"{sono_medio:.1f} h"),
@@ -1301,24 +1409,12 @@ def layout_habitos_correlacoes(data):
         "p-valor ajustado (FDR)": 4
     })
 
-    rotulos_correlacao = {
-        "study_hours_per_day": "Horas de estudo por dia",
-        "class_attendance_percent": "Frequência das aulas (%)",
-        "sleep_hours": "Horas de sono por noite",
-        "screen_time_hours": "Tempo de tela por dia (horas)",
-        "social_media_hours": "Tempo em redes sociais por dia (horas)",
-        "mental_stress_level": "Nível de estresse",
-        "GPA": "Desempenho acadêmico (GPA)",
-        "final_exam_score": "Nota da prova final",
-        "assignment_score": "Nota das atividades"
-    }
-
     tabela_correlacao["Hábito"] = tabela_correlacao["Hábito"].map(
-        lambda valor: rotulos_correlacao.get(valor, valor)
+        lambda valor: ROTULOS_VARIAVEIS.get(valor, valor)
     )
 
     tabela_correlacao["Desempenho"] = tabela_correlacao["Desempenho"].map(
-        lambda valor: rotulos_correlacao.get(valor, valor)
+        lambda valor: ROTULOS_VARIAVEIS.get(valor, valor)
     )
 
     return html.Div([
@@ -1345,7 +1441,7 @@ def layout_habitos_correlacoes(data):
                         dcc.Dropdown(
                             id="correlacao-x",
                             options=[
-                                {"label": coluna, "value": coluna}
+                                {"label": ROTULOS_VARIAVEIS.get(coluna, coluna), "value": coluna}
                                 for coluna in HABIT_VARIABLES + PERFORMANCE_VARIABLES
                                 if coluna in data.columns
                             ],
@@ -1365,7 +1461,7 @@ def layout_habitos_correlacoes(data):
                         dcc.Dropdown(
                             id="correlacao-y",
                             options=[
-                                {"label": coluna, "value": coluna}
+                                {"label": ROTULOS_VARIAVEIS.get(coluna, coluna), "value": coluna}
                                 for coluna in HABIT_VARIABLES + PERFORMANCE_VARIABLES
                                 if coluna in data.columns
                             ],
@@ -1519,7 +1615,7 @@ def layout_perfis_estudantes(
         ),
         html.Div([
             metric(
-                f"Silhouette Score (k={k_clusters})",
+                f"Coeficiente de silhueta (k={k_clusters})",
                 f"{silhueta_atual:.3f}",
                 qualidade_silhueta
             )
@@ -1560,6 +1656,10 @@ def layout_perfis_estudantes(
     ])
 
 def layout_avaliacao_kmeans(df_metricas_k, k_escolhido=None):
+    metricas_apresentacao = df_metricas_k.rename(columns={
+        "k": "Quantidade de grupos (k)",
+        "Silhouette Score": "Coeficiente de silhueta"
+    })
     return html.Section([
         html.H2(
             "Avaliação do agrupamento — K-Means",
@@ -1574,10 +1674,10 @@ def layout_avaliacao_kmeans(df_metricas_k, k_escolhido=None):
         graph(criar_grafico_cotovelo_silhueta(df_metricas_k, k_escolhido)),
 
         dash_table.DataTable(
-            data=df_metricas_k.to_dict("records"),
+            data=metricas_apresentacao.to_dict("records"),
             columns=[
                 {"name": col, "id": col}
-                for col in df_metricas_k.columns
+                for col in metricas_apresentacao.columns
             ],
             style_table={
                 "overflowX": "auto",
@@ -1802,11 +1902,11 @@ def renderizar_conteudo_abas(aba_ativa, cursos, anos, generos, idade, trabalho, 
         html.P(f"Amostra ativa: {len(data):,} estudantes filtrados (de {len(df_raw):,} totais).",
                 style={"color": "#c084fc", "marginBottom": "14px"}),
         html.Div([
-            metric("GPA Médio (0 - 4.0)", f"{gpa_medio:.2f}", f"{gpa_medio - 3.0:+.2f} vs Alvo"),
+            metric("Desempenho acadêmico médio (GPA, escala de 0 a 4)", f"{gpa_medio:.2f}", f"{gpa_medio - 3.0:+.2f} em relação à meta"),
             metric("Frequência Média", f"{frequencia_media:.1f}%"),
             metric("Estudo Diário", f"{estudo_medio:.1f} h/dia"),
             metric("Sono Diário", f"{sono_medio:.1f} h/noite"),
-            metric("Stress Mental", f"{estresse_medio:.1f} / 10"),
+            metric("Estresse mental", f"{estresse_medio:.1f} / 10"),
             metric("Adoção de IA", f"{adocao_ia:.1f}%"),
         ], style={"display": "grid", "gridTemplateColumns": "repeat(6, minmax(0, 1fr))", "gap": "12px", "marginBottom": "24px"})
     ]

@@ -20,6 +20,13 @@ from sklearn.preprocessing import StandardScaler
 
 from analysis.clusters import FEATURES_KMEANS
 
+try:
+    from visualization.graphs import criar_grafico_densidade_por_grupo
+    from visualization.style import CATEGORICAL_PALETTE
+except ImportError:
+    from ASTRA_Dashboard.visualization.graphs import criar_grafico_densidade_por_grupo
+    from ASTRA_Dashboard.visualization.style import CATEGORICAL_PALETTE
+
 LIMIAR_GPA = 3.5
 SEMENTE = 42
 # Só hábitos e idade. final_exam_score e assignment_score ficam de fora de propósito:
@@ -206,13 +213,24 @@ def calcular_analises_avancadas(df):
 
 
 def grafico_pca_outliers(dados):
-    fig = px.scatter(
-        dados.sample(min(len(dados), 4000), random_state=SEMENTE),
-        x="PC1", y="PC2", color="Perfil", symbol="Atípico",
-        symbol_map={"Típico": "circle", "Atípico": "x"},
-        opacity=0.65,
+    ordem_perfis = sorted(dados["Perfil"].dropna().unique())
+    mapa_cores = {
+        perfil: CATEGORICAL_PALETTE[indice % len(CATEGORICAL_PALETTE)]
+        for indice, perfil in enumerate(ordem_perfis)
+    }
+    return criar_grafico_densidade_por_grupo(
+        dados,
+        "PC1",
+        "PC2",
+        "Perfil",
+        ordem_perfis,
+        mapa_cores,
+        "Componente principal 1 (PC1)",
+        "Componente principal 2 (PC2)",
+        "Hábitos dos estudantes em dois componentes principais (PCA)",
+        destaques=dados.loc[dados["Atípico"] == "Atípico"],
+        label_destaques="Densidade de estudantes atípicos (HDBSCAN)"
     )
-    return fig
 
 
 def grafico_shap(shap_df):
